@@ -1,0 +1,70 @@
+#:kivy 1.0.9
+
+# IMPORTANT: screen name specify in main.py
+# sm.add_widget(SummaryScreen(name='summary'))
+# sm.add_widget(StockScreen(name='stock'))
+
+<TitleBar@BoxLayout>:
+    title_text: ''
+    switch: 'summary'
+    screenmanager: None
+    
+    size_hint: 1, None
+    height: '45sp'
+    Label:
+        text_size: self.size
+        halign: 'left'
+        valign: 'center'
+        text: root.title_text
+        font_size: '24sp'
+    Button:
+        size_hint: None, 1
+        width: '144sp'
+        text: 'switch'
+        font_size: '24sp'
+        on_press: root.screenmanager.current = root.switch
+    Spinner:
+        size_hint: None, 1
+        width: '108sp'
+        text: 'switch'
+        font_size: '24sp'
+        values: ('summary', 'stock')
+
+<SummaryScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint: 1, None
+            height: '45sp'
+            Label:
+                text_size: self.size
+                halign: 'left'
+                valign: 'center'
+                text: 'Title:Summary'
+                font_size: '24sp'
+            Button:
+                size_hint: None, 1
+                width: '144sp'
+                text: 'switch'
+                font_size: '24sp'
+                on_press: root.manager.current = 'stock'
+        TitleBar:
+            title_text: 'Title.Hoge'
+            screenmanager: root.manager
+            switch: 'stock'
+        BoxLayout:
+            height: '400sp'
+            Button:
+                text: 'contents'
+
+<StockScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        TitleBar:
+            title_text: 'Title.Stock'
+            screenmanager: root.manager
+            switch: 'summary'
+        BoxLayout:
+            height: '400sp'
+            Button:
+                text: 'contents'

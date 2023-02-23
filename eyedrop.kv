@@ -5,9 +5,11 @@
 # sm.add_widget(StockScreen(name='stock'))
 
 <TitleBar@BoxLayout>:
+    screen_manager: None
     title_text: ''
-    switch: 'summary'
-    screenmanager: None
+    switch_screen: 'summary'
+    switch_text: 'Summary'
+    slide_direction: 'left'
     
     size_hint: 1, None
     height: '45sp'
@@ -19,41 +21,23 @@
         font_size: '24sp'
     Button:
         size_hint: None, 1
-        width: '144sp'
-        text: 'switch'
+        width: '150sp'
+        text: root.switch_text
         font_size: '24sp'
-        on_press: root.screenmanager.current = root.switch
-    Spinner:
-        size_hint: None, 1
-        width: '108sp'
-        text: 'switch'
-        font_size: '24sp'
-        values: ('summary', 'stock')
+        on_press:
+            root.screen_manager.transition.direction = root.slide_direction
+            root.screen_manager.current = root.switch_screen
 
 <SummaryScreen>:
     BoxLayout:
         orientation: 'vertical'
-        BoxLayout:
-            size_hint: 1, None
-            height: '45sp'
-            Label:
-                text_size: self.size
-                halign: 'left'
-                valign: 'center'
-                text: 'Title:Summary'
-                font_size: '24sp'
-            Button:
-                size_hint: None, 1
-                width: '144sp'
-                text: 'switch'
-                font_size: '24sp'
-                on_press: root.manager.current = 'stock'
         TitleBar:
-            title_text: 'Title.Hoge'
-            screenmanager: root.manager
-            switch: 'stock'
+            screen_manager: root.manager
+            title_text: 'Eyedrop Summary'
+            switch_screen: 'stock'
+            switch_text: 'Stock'
+            slide_direction: 'left'
         BoxLayout:
-            height: '400sp'
             Button:
                 text: 'contents'
 
@@ -61,10 +45,11 @@
     BoxLayout:
         orientation: 'vertical'
         TitleBar:
-            title_text: 'Title.Stock'
-            screenmanager: root.manager
-            switch: 'summary'
+            screen_manager: root.manager
+            title_text: 'Eyedrop Stock'
+            switch_screen: 'summary'
+            switch_text: 'Summary'
+            slide_direction: 'right'
         BoxLayout:
-            height: '400sp'
             Button:
                 text: 'contents'

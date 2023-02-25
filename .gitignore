@@ -1,0 +1,11 @@
+*~
+
+# A collection of .gitignore templates
+# https://github.com/github/gitignore
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/

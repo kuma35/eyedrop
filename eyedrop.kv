@@ -36,7 +36,7 @@
         width: '100sp'
         halign: 'left'
         valign: 'center'
-        text: 'span'
+        text: h._('span')
         font_size: '24sp'
     TextInput:
         size_hint: None, 1
@@ -51,7 +51,7 @@
         orientation: 'vertical'
         TitleBar:
             screen_manager: root.manager
-            title_text: 'Eyedrop Summary'
+            title_text: h._('Eyedrop Summary')
             switch_screen: 'stock'
             switch_text: 'Stock'
             slide_direction: 'left'
@@ -65,7 +65,7 @@
         orientation: 'vertical'
         TitleBar:
             screen_manager: root.manager
-            title_text: 'Eyedrop Stock'
+            title_text: h._('Eyedrop Stock')
             switch_screen: 'summary'
             switch_text: 'Summary'
             slide_direction: 'right'

@@ -74,22 +74,46 @@ class TestEstimate(unittest.TestCase):
     def test_requirement(self):
         est = estimate_days([life('2024-01-01', '2024-01-31')])  # 30日
         # 開封10日目: 残20日。60日 - 20日 = 40日 -> 2本。在庫1 -> 1本依頼
-        req = requirement(1, est, '2024-06-01', '2024-06-11', 60)
+        req = requirement(1, est, '2024-06-01', '2024-06-11', 60, spare=0)
         self.assertEqual((req.remaining, req.need, req.request), (20, 2, 1))
         # 在庫が十分
-        req = requirement(3, est, '2024-06-01', '2024-06-11', 60)
+        req = requirement(3, est, '2024-06-01', '2024-06-11', 60, spare=0)
         self.assertEqual((req.need, req.request), (2, 0))
         # 開封中なし
-        req = requirement(0, est, None, '2024-06-11', 60)
+        req = requirement(0, est, None, '2024-06-11', 60, spare=0)
         self.assertEqual((req.need, req.request), (2, 2))
         # 残りだけで足りる
-        req = requirement(0, est, '2024-06-10', '2024-06-11', 20)
+        req = requirement(0, est, '2024-06-10', '2024-06-11', 20, spare=0)
         self.assertEqual((req.need, req.request), (0, 0))
+
+    def test_requirement_prescription_limit(self):
+        est = estimate_days([life('2024-01-01', '2024-01-11')])  # 10日
+        # 開封中なし、60日 -> 6本使用 + 予備1 = 7本必要、在庫1 -> 上限3本
+        # 不足は予備を除いた使用分で判定: 6 - 1 - 3 = 2
+        req = requirement(1, est, None, '2024-06-11', 60)
+        self.assertEqual((req.use, req.need, req.request, req.shortage),
+                         (6, 7, 3, 2))
+        self.assertIn('over prescription limit', req.warnings)
+        # 在庫が3本を超えていても構わない(依頼は0)
+        req = requirement(7, est, None, '2024-06-11', 60)
+        self.assertEqual((req.request, req.shortage), (0, 0))
+
+    def test_requirement_spare(self):
+        est = estimate_days([life('2024-01-01', '2024-01-31')])  # 30日
+        # 残20日、60日 -> 使用2本 + 予備1 = 3本、在庫1 -> 依頼2
+        req = requirement(1, est, '2024-06-01', '2024-06-11', 60)
+        self.assertEqual((req.use, req.spare, req.need, req.request),
+                         (2, 1, 3, 2))
+        # 予備が上限で削られるだけなら不足・警告にしない
+        req = requirement(0, est, None, '2024-06-11', 90)
+        self.assertEqual((req.use, req.need, req.request, req.shortage),
+                         (3, 4, 3, 0))
+        self.assertEqual(req.warnings, [])
 
     def test_requirement_warnings(self):
         est = estimate_days([life('2024-01-01', '2024-01-31')])
         req = requirement(-1, est, '2024-06-01', '2024-07-20', 60,
-                          max_days=28)
+                          max_days=28, spare=0)
         self.assertEqual(req.warnings, ['stock negative'])
         # 推奨使用期限・推定超過は info のみ
         self.assertEqual(set(req.info), {'over max_days', 'over estimate'})
@@ -101,7 +125,7 @@ class TestEstimate(unittest.TestCase):
         est = estimate_days([life('2024-01-01', '2024-02-02')])
         self.assertEqual(est.days, 32)
         req = requirement(0, est, '2024-06-01', '2024-06-30', 60,
-                          max_days=28)
+                          max_days=28, spare=0)
         self.assertEqual(req.info, ['over max_days'])
         self.assertEqual((req.remaining, req.need), (3, 2))
 
@@ -170,6 +194,21 @@ class TestDrugDb(DbTestCase):
         self.assertEqual(self.db.balance('A'), 1)
         with self.assertRaises(DrugDbError):
             self.db.open_bottle('A', '2024-01-15')
+
+    def test_as_of_past_date(self):
+        self.db.add_drug('A')
+        self.db.receive('A', 3, '2024-01-01')
+        for day in ('2024-01-01', '2024-01-31', '2024-03-01'):
+            self.db.open_bottle('A', day)
+        # 2/10 時点: 1/31 開封分が使用中、実績は 1/1〜1/31 の30日だけ
+        self.assertEqual(self.db.opened('A', as_of='2024-02-10')['use_start'],
+                         '2024-01-31')
+        self.assertEqual(self.db.estimate('A', as_of='2024-02-10').samples,
+                         [30])
+        req = self.db.requirement('A', span=60, today='2024-02-10')
+        self.assertEqual((req.stock, req.elapsed, req.remaining),
+                         (1, 10, 20))
+        self.assertIsNone(self.db.opened('A', as_of='2023-12-31'))
 
     def test_finish_bottle(self):
         self.db.add_drug('A')
@@ -240,16 +279,24 @@ class TestReport(DbTestCase):
         self.assertEqual(report.next_visit, date(2024, 8, 10))
         self.assertEqual([line.name for line in report.lines], ['A', 'B'])
         req = report.lines[0].req
-        self.assertEqual((req.stock, req.need, req.request), (1, 2, 1))
+        self.assertEqual((req.stock, req.need, req.request), (1, 3, 2))
         text = to_markdown(report)
         self.assertTrue(text.startswith('# 目薬 受診前サマリー 2024-06-11\n'))
         # 依頼がある行は太字
-        self.assertIn('- **A(A-generic): 必要2本・在庫1本なので 1本 ください**',
+        self.assertIn('- **A(A-generic): 必要3本・在庫1本なので 2本 ください**',
                       text)
         self.assertIn('- B: 在庫2本(使用実績なし。必要数は相談)', text)
         self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 残り約20日 | 30'
-                      ' | 2 | 1 |', text)
+                      ' | 3 | 2 |', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
+        # 来院時必要本数: 2週間/4週間/2ヶ月。10日経過・残20日・30日/本
+        self.assertEqual([r.need for r in report.lines[0].patterns],
+                         [1, 2, 3])
+        # 処方不要は空欄、必要なら「必要N」(N は依頼数)
+        self.assertIn('| A(A-generic) | 1 |  | 必要1 | 必要2 |', text)
+        self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
+        self.assertLess(text.index('## 来院時必要本数'),
+                        text.index('## 目薬在庫'))
 
     def test_report_as_needed_and_info(self):
         make_sample(self.db)
@@ -265,11 +312,22 @@ class TestReport(DbTestCase):
         self.assertIn('| A | 1 | 6/1 | 34 | 超過4日 | 31 |', table)
         self.assertIn('| B | 2 |  |  |  |  |', table)
         self.assertNotIn('ヒアレイン', table)
+        self.assertIn('| ヒアレイン | 2 | 随時 | 随時 | 随時 |', text)
         self.assertIn('| ヒアレイン | 2 | 開封中なし | -(参考) | - | - |',
                       text)
         self.assertIn('- [info] A(A-generic): 開封から34日経過。'
                       '推奨使用期限の28日を過ぎて', text)
         self.assertNotIn('[警告]', text)
+
+    def test_report_prescription_limit(self):
+        self.db.add_drug('A')
+        self.db.add_lifetime('A', '2024-01-01', '2024-01-11')  # 10日/本
+        report = make_report(self.db, today='2024-06-11', span=60)
+        text = to_markdown(report)
+        self.assertIn('| A | 0 | 必要3 | 必要3 | 必要3(不足3) |', text)
+        self.assertIn('3本 ください(処方上限3本。3本不足)', text)
+        self.assertIn('[警告] A: 処方上限3本では次回受診までに3本不足します',
+                      text)
 
     def test_report_until(self):
         make_sample(self.db)
@@ -349,7 +407,7 @@ class TestCli(DbTestCase):
         out = self.run_cmd('life A')[0]
         self.assertIn('2024-01-01 〜 2024-01-31  30日', out)
         out = self.run_cmd('report --today 2024-02-10 -s 60')[0]
-        self.assertIn('A: 必要2本・在庫1本なので 1本 ください', out)
+        self.assertIn('A: 必要3本・在庫1本なので 2本 ください', out)
 
     def test_errors(self):
         _, err, failed = self.run_cmd('in 無い薬 1')

@@ -312,7 +312,7 @@ class DrugDbShell(Cmd):
 
     # ------------------------------------------------------------ report
     @command(('-s', '--span', {'type': int, 'default': None,
-                               'help': '次回受診までの日数(既定60)'}),
+                               'help': '次回受診までの日数(既定60=2ヶ月)'}),
              ('-u', '--until', {'type': parse_date, 'default': None,
                                 'help': '次回受診日'}),
              ('--margin', {'type': int, 'default': 0,

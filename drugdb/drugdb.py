@@ -408,21 +408,44 @@ class DrugDb():
         if cur.rowcount == 0:
             raise DrugDbError(f'ライフタイムがありません: {lifetime_id}')
 
-    def lifetimes(self, key) -> list[sqlite3.Row]:
-        """lifetime records, oldest first"""
-        drug_id = self.find_drug(key)['drug_id']
-        return self.conn.execute(E.LIST_LIFETIME,
-                                 {'drug_id': drug_id}).fetchall()
+    def lifetimes(self, key, as_of=None) -> list:
+        """lifetime records, oldest first
 
-    def opened(self, key) -> Optional[sqlite3.Row]:
-        """currently opened lifetime record or None
+        JP:
+        ライフタイムを開封日の古い順に返す。
+        as_of を指定するとその日時点の状態(その日以前の開封分だけ。
+        その日より後に終了したものは使用中 use_end=None 扱い)を dict で返す。
+        """
+        drug_id = self.find_drug(key)['drug_id']
+        rows = self.conn.execute(E.LIST_LIFETIME,
+                                 {'drug_id': drug_id}).fetchall()
+        if as_of is None:
+            return rows
+        limit = iso(as_of)
+        result = []
+        for row in rows:
+            if row['use_start'] > limit:
+                continue
+            item = dict(row)
+            if item['use_end'] is not None and item['use_end'] > limit:
+                item['use_end'] = None
+            result.append(item)
+        return result
+
+    def opened(self, key, as_of=None):
+        """opened lifetime record (as of date) or None
 
         JP:
         開封中のライフタイム。無ければ None。
+        as_of を指定するとその日時点で開封中だったもの。
         """
         drug_id = self.find_drug(key)['drug_id']
-        return self.conn.execute(E.OPEN_LIFETIME,
-                                 {'drug_id': drug_id}).fetchone()
+        if as_of is None:
+            return self.conn.execute(E.OPEN_LIFETIME,
+                                     {'drug_id': drug_id}).fetchone()
+        rows = [row for row in self.lifetimes(drug_id, as_of)
+                if row['use_end'] is None]
+        return rows[-1] if rows else None
 
     def summaries(self, key) -> list[sqlite3.Row]:
         """past years lifetime summary"""
@@ -430,14 +453,14 @@ class DrugDb():
         return self.conn.execute(E.LIST_SUMMARY,
                                  {'drug_id': drug_id}).fetchall()
 
-    def estimate(self, key, **kwargs) -> Estimate:
+    def estimate(self, key, as_of=None, **kwargs) -> Estimate:
         """estimated days per bottle
 
         JP:
-        1本の推定使用日数。
+        1本の推定使用日数。 as_of を指定するとその日までの実績で推定。
         """
         drug = self.find_drug(key)
-        return estimate_days(self.lifetimes(drug['drug_id']),
+        return estimate_days(self.lifetimes(drug['drug_id'], as_of),
                              self.summaries(drug['drug_id']),
                              default_days=drug['default_days'], **kwargs)
 
@@ -447,13 +470,14 @@ class DrugDb():
 
         JP:
         次回受診(today + span 日後)までの必要本数と依頼数。
+        在庫・開封中・推定は today 時点の記録で計算する(過去日付でも可)。
         """
         drug = self.find_drug(key)
         today = to_date(iso(today))
-        opened = self.opened(drug['drug_id'])
+        opened = self.opened(drug['drug_id'], as_of=today)
         return requirement(
             stock=self.balance(drug['drug_id'], as_of=today),
-            est=self.estimate(drug['drug_id'], **kwargs),
+            est=self.estimate(drug['drug_id'], as_of=today, **kwargs),
             opened=opened['use_start'] if opened else None,
             today=today, span=span, max_days=drug['max_days'],
             margin_days=margin_days, as_needed=bool(drug['as_needed']))

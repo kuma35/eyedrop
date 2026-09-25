@@ -21,6 +21,10 @@ DB に依存しない計算ロジック。
 次回受診までの日数 span のうち、開封中の分の推定残日数で賄えない日数を
 推定使用日数で割って切り上げたものが必要本数。
 必要本数から未開封在庫数を引いたものが依頼数。
+必要本数には予備 SPARE_BOTTLES(1本程度の余裕)を含める。
+依頼数は1回の処方の上限 MAX_PRESCRIPTION(3本)を超えない。
+予備を除いた使用分だけで上限を超える分を不足数(shortage)とし、警告を出す
+(予備が上限で削られるだけなら警告しない)。在庫が3本を超えるのは構わない。
 
 随時使用(as_needed)の薬は毎日使うものではないので必要本数を計算しない。
 推定使用日数は参考値として表示するだけ。
@@ -34,6 +38,10 @@ from statistics import median
 from typing import Iterable, Optional, Sequence
 
 DEFAULT_WINDOW = 3
+# 1回の処方で出してもらえる最大本数(健康保険による制限。絶対)
+MAX_PRESCRIPTION = 3
+# 必要本数に加える予備(余裕)の本数
+SPARE_BOTTLES = 1
 DEFAULT_SHORT_RATIO = 0.7
 
 
@@ -167,8 +175,11 @@ class Requirement:
     opened: Optional[date] = None    # 開封中の開封日
     elapsed: Optional[int] = None    # 開封からの経過日数
     remaining: Optional[float] = None  # 開封中の推定残日数
-    need: Optional[int] = None       # 必要本数
-    request: Optional[int] = None    # 依頼数
+    need: Optional[int] = None       # 必要本数(予備を含む)
+    use: Optional[int] = None        # 期間中に使う本数(予備を含まない)
+    spare: int = 0                   # 予備の本数
+    request: Optional[int] = None    # 依頼数(処方上限まで)
+    shortage: int = 0                # 処方上限を超えて足りない本数
     max_days: Optional[int] = None   # 推奨使用期限日数
     as_needed: bool = False          # 随時使用
     warnings: list[str] = field(default_factory=list)  # 警告
@@ -178,7 +189,8 @@ class Requirement:
 def requirement(stock: int, est: Estimate, opened, today, span: int,
                 max_days: Optional[int] = None,
                 margin_days: int = 0,
-                as_needed: bool = False) -> Requirement:
+                as_needed: bool = False,
+                spare: int = SPARE_BOTTLES) -> Requirement:
     """calculate required bottles until next visit
 
     JP:
@@ -203,6 +215,12 @@ def requirement(stock: int, est: Estimate, opened, today, span: int,
     if est.days is None or as_needed:
         return req
     cover = span + margin_days - (req.remaining or 0.0)
-    req.need = max(0, math.ceil(cover / est.days)) if cover > 0 else 0
-    req.request = max(0, req.need - max(stock, 0))
+    req.use = max(0, math.ceil(cover / est.days)) if cover > 0 else 0
+    req.spare = spare
+    req.need = req.use + spare
+    stock = max(stock, 0)
+    req.request = min(max(0, req.need - stock), MAX_PRESCRIPTION)
+    req.shortage = max(0, req.use - stock - MAX_PRESCRIPTION)
+    if req.shortage:
+        req.warnings.append('over prescription limit')
     return req

@@ -765,7 +765,7 @@ class EyedropApp:
         ]
         today = date.today()
         rows = []
-        for row in reversed(self.db.lifetimes(drug_id)):
+        for row in self.db.lifetimes(drug_id):  # 古い順(昇順)
             start = date.fromisoformat(row['use_start'])
             end = date.fromisoformat(row['use_end']) if row['use_end'] \
                 else None
@@ -786,7 +786,7 @@ class EyedropApp:
         controls.append(self.heading('在庫の履歴'))
         labels = {'in': '入庫', 'out': '出庫', 'inventory': '棚卸'}
         rows = []
-        for row in reversed(self.db.stock_history(drug_id)):
+        for row in self.db.stock_history(drug_id):  # 古い順(昇順)
             label = (f"{row['stock_date']} {labels[row['kind']]}"
                      f" {row['qty']}  残{row['balance']}")
             rows.append(self.history_row(label, row['note']))

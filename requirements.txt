@@ -1,0 +1,10 @@
+# 実行時(GUI)
+kivy
+kivy_garden
+# 開発用(check.sh・ドキュメント)
+flake8
+pycodestyle
+pylint
+sphinx
+sphinx_rtd_theme
+sphinx_rtd_dark_mode

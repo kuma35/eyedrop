@@ -162,6 +162,8 @@ class DrugDbShell(Cmd):
                 extra.append(f"推奨期限{drug['max_days']}日")
             if drug['end_date']:
                 extra.append(f"{drug['end_date']}終了")
+            elif not self.db.is_active(drug['drug_id']):
+                extra.append('目薬名がすべて利用終了')
             self.print(f"{drug['drug_id']:3} {drug['name']}"
                        f"  在庫{self.db.balance(drug['drug_id'])}"
                        + (f"  ({', '.join(extra)})" if extra else ''))
@@ -194,10 +196,19 @@ class DrugDbShell(Cmd):
             value = parse_date(value)
         self.db.update_drug(args.drug, **{args.field: value})
 
-    @command(DRUG, ('name', {'help': '現在の薬の名前'}), DATE, MEMO)
+    @command(DRUG, ('name', {'help': '実際に支給される名前'}), DATE, MEMO)
     def do_alias(self, args):
-        """実際に支給される名前を変更(代表名はそのまま。-d で開始日)"""
+        """実際に支給される名前を追加(代表目薬名はそのまま。-d で開始日)"""
         self.db.add_alias(args.drug, args.name, args.date, args.memo)
+
+    @command(DRUG, ('name', {'help': '実際に支給される名前'}),
+             ('-d', '--date', {'type': parse_date, 'default': None,
+                               'help': '利用終了日(省略時今日)'}),
+             ('--clear', {'action': 'store_true', 'help': '利用中に戻す'}))
+    def do_endname(self, args):
+        """目薬名の利用終了日を設定(全部終了した代表目薬名は利用終了扱い)"""
+        self.db.end_alias(args.drug, args.name,
+                          '' if args.clear else args.date)
 
     @command(DRUG, ('text', {'help': 'メモ'}), DATE)
     def do_note(self, args):
@@ -224,7 +235,8 @@ class DrugDbShell(Cmd):
             if drug[key] is not None:
                 self.print(f'  {key}: {drug[key]}')
         for row in self.db.aliases(drug_id):
-            self.print(f"  名前: {row['start_date']}〜 {row['alias_name']}")
+            self.print(f"  目薬名: {row['start_date']}〜"
+                       f"{row['end_date'] or '(利用中)'} {row['alias_name']}")
         for row in self.db.notes(drug_id):
             self.print(f"  メモ: {row['note_date'] or ''} {row['text']}")
         for row in self.db.summaries(drug_id):

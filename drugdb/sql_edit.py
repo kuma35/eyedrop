@@ -39,6 +39,10 @@ INSERT INTO drug_alias (drug_id, alias_name, start_date, note)
     VALUES (:drug_id, :alias_name, :start_date, :note);
 """
 
+SET_ALIAS_END = """
+UPDATE drug_alias SET end_date = :end_date WHERE alias_id = :alias_id;
+"""
+
 LIST_ALIASES = """
 SELECT * FROM drug_alias WHERE drug_id = :drug_id
     ORDER BY start_date IS NULL, start_date, alias_id;

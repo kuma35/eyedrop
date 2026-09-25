@@ -20,11 +20,11 @@ WARNING_TEXT = {
 
 LEVEL_LABEL = {'warning': '[警告]', 'info': '[info]'}
 
-# 目薬名の表示。代表名(登録名。例: コソプト。固定)と実際の名前(実際に支給
+# 名前の表示。代表目薬名(登録名。例: コソプト。固定)と目薬名(実際に支給
 # される薬の名前。例: ドルモロール。変わったら開始日とともに記録)
 NAME_MODES = ('both', 'representative', 'actual')
-NAME_HEAD = {'both': '目薬名', 'representative': '代表名',
-             'actual': '実際の名前'}
+NAME_HEAD = {'both': '代表目薬名(目薬名)', 'representative': '代表目薬名',
+             'actual': '目薬名'}
 
 # 来院時必要本数申告の期間パターン (表示名, 日数)。毎回すべて推定する。
 # 通常は2ヶ月。病状により2週間と1ヶ月(4週間)
@@ -86,7 +86,7 @@ def make_report(db: DrugDb, today=None, span: Optional[int] = None,
 
     JP:
     サマリーを作る。次回受診日は span(日数)または next_visit(日付)で指定。
-    使用終了した薬は含めない。 name_mode は目薬名の表示(NAME_MODES)。
+    使用終了した薬は含めない。 name_mode は名前の表示(NAME_MODES)。
     """
     if name_mode not in NAME_MODES:
         raise ValueError(f'name_mode が不正です: {name_mode}')
@@ -119,8 +119,8 @@ def line_name(line: ReportLine, mode: str = 'both') -> str:
     """drug name for display by name mode
 
     JP:
-    表示する目薬名。 mode は NAME_MODES のいずれか。
-    'both' は「代表名(実際の名前)」(同じなら代表名だけ)。
+    表示する名前。 mode は NAME_MODES のいずれか。
+    'both' は「代表目薬名(目薬名)」(同じなら代表目薬名だけ)。
     """
     if mode == 'representative':
         return line.name
@@ -275,8 +275,10 @@ def stock_table(report: Report) -> list[str]:
     「目薬在庫」の表。随時使用の薬は含めない。
     """
     mode = report.name_mode
+    # 既定(both)でもこの表は代表目薬名だけ(ods のノート形式)
+    head = NAME_HEAD['representative'] if mode == 'both' else NAME_HEAD[mode]
     out = ['## 目薬在庫', '',
-           f'| {NAME_HEAD[mode]} | 未開封個数 | 開封分開封日 | 経過日数'
+           f'| {head} | 未開封個数 | 開封分開封日 | 経過日数'
            ' | 推定残日数 | 日数 |',
            '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
@@ -286,7 +288,7 @@ def stock_table(report: Report) -> list[str]:
         opened = f'{req.opened.month}/{req.opened.day}' if req.opened else ''
         days = '' if line.last_days is None else line.last_days
         elapsed = '' if req.elapsed is None else req.elapsed
-        # 既定(both)ではユーザーの ods と同じく代表名
+        # 既定(both)ではユーザーの ods と同じく代表目薬名
         name = line.name if mode == 'both' else line_name(line, mode)
         out.append(f'| {_md_cell(name)} | {req.stock} | {opened}'
                    f' | {elapsed} | {remaining_text(req)} | {days} |')

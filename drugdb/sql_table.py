@@ -25,8 +25,10 @@ drug
 drug_alias
 ----------
 
-実際に貰っている薬の名前の履歴。 start_date が一番新しいものが
-現在の名前です。無ければ drug.name をそのまま使います。
+実際に支給される薬の名前(ジェネリック等)。代表目薬名(drug.name)は固定。
+end_date(利用終了日)が空欄の名前は利用中です。切替時期は利用中の名前が
+2つになることもあります。目薬名がすべて利用終了した代表目薬名は利用終了扱い。
+名前が1件も無ければ drug.name をそのまま使います。
 
 stock
 -----
@@ -60,7 +62,7 @@ drug_note
 「両眼再開」「手術後左眼中止」など、日付付きのメモ。
 """
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DRUG = """
 CREATE TABLE IF NOT EXISTS drug (
@@ -81,7 +83,8 @@ CREATE TABLE IF NOT EXISTS drug_alias (
     drug_id INTEGER NOT NULL REFERENCES drug(drug_id),
     alias_name TEXT NOT NULL,    -- 例:ドルモロール
     start_date TEXT,             -- 例:2022-01-01
-    note TEXT
+    note TEXT,
+    end_date TEXT                -- 利用終了日。NULLなら利用中
 );
 """
 
@@ -144,6 +147,7 @@ CREATE INDEX IF NOT EXISTS lifetime_drug_start
 # 旧バージョンで作成済のテーブルに追加する列 {テーブル名: [(列名, 定義)]}
 ADD_COLUMNS = {
     'drug': [('as_needed', 'INTEGER NOT NULL DEFAULT 0')],
+    'drug_alias': [('end_date', 'TEXT')],
 }
 
 # 名前はテーブル名と合わせてください

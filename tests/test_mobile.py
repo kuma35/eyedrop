@@ -108,7 +108,8 @@ class TestMobileScreens(unittest.TestCase):
         def walk(obj):
             if isinstance(obj, ft.Text):
                 out.append(str(obj.value))
-            for name in ('content', 'title', 'subtitle', 'label'):
+            for name in ('content', 'title', 'subtitle', 'label',
+                         'trailing'):
                 child = getattr(obj, name, None)
                 if isinstance(child, ft.Control):
                     walk(child)
@@ -118,6 +119,27 @@ class TestMobileScreens(unittest.TestCase):
         for control in controls:
             walk(control)
         return '\n'.join(out)
+
+    def test_picked_date(self):
+        from datetime import date, datetime, timedelta, timezone
+        picked_date = self.main.picked_date
+        jst = timezone(timedelta(hours=9))
+        # 日本時間 6/30 0時が UTC(6/29 15時)で返っても 6/30
+        self.assertEqual(picked_date(datetime(2025, 6, 29, 15, 0,
+                                              tzinfo=timezone.utc)),
+                         date(2025, 6, 30))
+        self.assertEqual(picked_date(datetime(2025, 6, 29, 15, 0)),
+                         date(2025, 6, 30))
+        self.assertEqual(picked_date(datetime(2025, 6, 30, tzinfo=jst)),
+                         date(2025, 6, 30))
+        self.assertEqual(picked_date(datetime(2025, 6, 30)),
+                         date(2025, 6, 30))
+        # 西側の時間帯(UTC-5 の 6/30 0時 = UTC 6/30 5時)
+        self.assertEqual(picked_date(datetime(2025, 6, 30, 5, 0,
+                                              tzinfo=timezone.utc)),
+                         date(2025, 6, 30))
+        self.assertEqual(picked_date(date(2025, 6, 30)), date(2025, 6, 30))
+        self.assertIsNone(picked_date(None))
 
     def test_database_path(self):
         env = {'EYEDROP_DB': '', 'FLET_APP_STORAGE_DATA': '/data/app'}
@@ -160,7 +182,7 @@ class TestMobileScreens(unittest.TestCase):
 
     def test_drugs(self):
         text = self.texts(self.app.build_drugs())
-        # 既定は代表名
+        # 既定は代表目薬名
         self.assertIn('A\n', text)
         self.assertNotIn('A-generic', text)
         self.assertIn('未開封 0本', text)
@@ -172,13 +194,13 @@ class TestMobileScreens(unittest.TestCase):
         self.assertEqual(self.app.name_mode, 'representative')
         self.assertEqual(self.app.drug_label(drug_id), 'A')
         summary = self.texts(self.app.build_summary())
-        self.assertIn('代表名', summary)
+        self.assertIn('代表目薬名', summary)
         self.assertNotIn('A-generic', summary)
         # 画面内一斉切替: 実際に支給される名前
         self.app.set_name_mode('actual')
         self.assertEqual(self.app.drug_label(drug_id), 'A-generic')
         summary = self.texts(self.app.build_summary())
-        self.assertIn('実際の名前', summary)
+        self.assertIn('目薬名', summary)
         self.assertIn('A-generic', summary)
         self.assertIn('A-generic', self.texts(self.app.build_drugs()))
         # 共有する Markdown も切り替わる
@@ -186,10 +208,31 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('| A-generic |', to_markdown(self.app.report()))
         # 詳細では両方を表示
         detail = self.texts(self.app.build_detail(drug_id))
-        self.assertIn('代表名: A', detail)
-        self.assertIn('実際の名前: A-generic (2026-02-01〜)', detail)
+        self.assertIn('代表目薬名: A', detail)
+        self.assertIn('目薬名:\nA-generic\n2026-02-01〜利用中', detail)
         menu = self.app.build_topbar().leading
         self.assertEqual([i.checked for i in menu.items[:2]], [False, True])
+
+    def test_alias_end_and_ended_drugs(self):
+        db = self.app.db
+        drug_id = db.find_drug('C')['drug_id']
+        db.add_alias('C', 'C-actual', '2022-10-20')
+        db.end_alias('C', 'C-actual', '2025-06-30')
+        # 目薬名がすべて利用終了 → サマリー・目薬タブに出ない
+        self.assertNotIn('C\n', self.texts(self.app.build_drugs()))
+        detail = self.texts(self.app.build_detail(drug_id))
+        self.assertIn('利用終了 2025-06-30(目薬名がすべて利用終了)',
+                      detail)
+        self.assertIn('2022-10-20〜2025-06-30', detail)
+        self.assertIn('利用中に戻す', detail)
+        # 利用終了した目薬も表示
+        self.app.set_show_ended(True)
+        controls = self.app.build_drugs()
+        switch = [c for c in controls if isinstance(c, ft.Switch)][0]
+        self.assertEqual((switch.label, switch.value),
+                         ('利用終了した目薬も表示', True))
+        drugs = self.texts(controls)
+        self.assertIn('利用終了 2025-06-30', drugs)
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']

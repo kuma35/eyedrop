@@ -175,6 +175,55 @@ class TestDrugDb(DbTestCase):
         self.assertEqual(self.db.balance('A', as_of='2023-02-28'), 2)
         self.assertEqual(self.db.balance('A'), 4)
 
+    def test_alias_end_date(self):
+        self.db.add_drug('コソプト')
+        self.db.add_alias('コソプト', 'ドルモロール', '2022-01-01')
+        self.assertEqual(self.db.current_name('コソプト'), 'ドルモロール')
+        # 切替時期は利用中の目薬名が2つ
+        self.db.add_alias('コソプト', 'ジェネリックB', '2026-10-01')
+        self.assertEqual(self.db.current_name('コソプト'),
+                         'ドルモロール・ジェネリックB')
+        self.db.end_alias('コソプト', 'ドルモロール', '2026-10-20')
+        self.assertEqual(
+            [r['alias_name'] for r in
+             self.db.active_aliases('コソプト', as_of='2026-10-21')],
+            ['ジェネリックB'])
+        # 利用終了日の当日までは利用中
+        self.assertEqual(
+            len(self.db.active_aliases('コソプト', as_of='2026-10-20')), 2)
+        # 利用中に戻す
+        self.db.end_alias('コソプト', 'ドルモロール', '')
+        self.assertIsNone(self.db.aliases('コソプト')[0]['end_date'])
+        with self.assertRaises(DrugDbError):
+            self.db.end_alias('コソプト', '無い名前', '2026-01-01')
+
+    def test_all_aliases_ended_means_drug_ended(self):
+        self.db.add_drug('ヒアレイン')
+        self.db.add_alias('ヒアレイン', 'ヒアルロン酸', '2022-10-20')
+        self.db.add_drug('B')             # 目薬名が無い薬は利用中
+        self.assertEqual([r['name'] for r in
+                          self.db.list_drugs(active_only=True)],
+                         ['ヒアレイン', 'B'])
+        self.db.end_alias('ヒアレイン', 'ヒアルロン酸', '2025-06-30')
+        self.assertFalse(self.db.is_active('ヒアレイン'))
+        self.assertEqual([r['name'] for r in
+                          self.db.list_drugs(active_only=True)], ['B'])
+        # 全部利用終了なら最後の名前
+        self.assertEqual(self.db.current_name('ヒアレイン'), 'ヒアルロン酸')
+
+    def test_migrate_alias_end_date(self):
+        path = str(self.path / 'v3.db')
+        conn = sqlite3.connect(path)
+        conn.execute('CREATE TABLE drug_alias (alias_id INTEGER PRIMARY KEY,'
+                     ' drug_id INTEGER NOT NULL, alias_name TEXT NOT NULL,'
+                     ' start_date TEXT, note TEXT)')
+        conn.commit()
+        conn.close()
+        with DrugDb(path) as old:
+            columns = [r['name'] for r in
+                       old.conn.execute('PRAGMA table_info(drug_alias)')]
+            self.assertIn('end_date', columns)
+
     def test_duplicate_drug_name(self):
         self.db.add_drug('コソプト')
         with self.assertRaises(DrugDbError):
@@ -246,7 +295,7 @@ class TestDrugDb(DbTestCase):
         self.db.close()
         self.db = DrugDb(str(self.path / 'test.db'))
         self.assertEqual(len(self.db.list_drugs()), 1)
-        self.assertEqual(self.db.get_meta('schema_version'), '3')
+        self.assertEqual(self.db.get_meta('schema_version'), '4')
 
     def test_migrate_add_as_needed(self):
         path = str(self.path / 'old.db')
@@ -302,8 +351,9 @@ class TestReport(DbTestCase):
                          [3, 2, 1])
         # 処方不要は空欄、必要なら「必要N」(N は依頼数)
         self.assertIn('| A(A-generic) | 1 | 必要2 | 必要1 |  |', text)
-        self.assertIn('| 目薬名 | 未開封 | 2ヶ月(通常) | 1ヶ月(4週間) | 2週間 |',
-                      text)
+        self.assertIn('| 代表目薬名(目薬名) | 未開封 | 2ヶ月(通常)'
+                      ' | 1ヶ月(4週間) | 2週間 |', text)
+        self.assertIn('| 代表目薬名 | 未開封個数 |', text)
         self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
         self.assertLess(text.index('## 来院時必要本数'),
                         text.index('## 目薬在庫'))
@@ -329,11 +379,11 @@ class TestReport(DbTestCase):
         self.assertIn('| A(A-generic) | 1 |', both)
         rep = to_markdown(make_report(self.db, today='2024-06-11',
                                       name_mode='representative'))
-        self.assertIn('| 代表名 | 未開封 |', rep)
+        self.assertIn('| 代表目薬名 | 未開封 |', rep)
         self.assertNotIn('A-generic', rep)
         act = to_markdown(make_report(self.db, today='2024-06-11',
                                       name_mode='actual'))
-        self.assertIn('| 実際の名前 | 未開封 |', act)
+        self.assertIn('| 目薬名 | 未開封 |', act)
         self.assertIn('- **A-generic: 必要3本', act)
         with self.assertRaises(ValueError):
             make_report(self.db, name_mode='bad')
@@ -451,6 +501,18 @@ class TestCli(DbTestCase):
         out = self.run_cmd('report --today 2024-02-10 --plain')[0]
         self.assertIn('■ 来院時必要本数', out)
         self.assertNotIn('| ', out)
+
+    def test_endname(self):
+        self.run_cmd('add ヒアレイン')
+        self.run_cmd('alias ヒアレイン ヒアルロン酸 -d 2022-10-20')
+        self.assertFalse(self.run_cmd('endname ヒアレイン ヒアルロン酸'
+                                      ' -d 2025-06-30')[2])
+        out = self.run_cmd('show ヒアレイン')[0]
+        self.assertIn('目薬名: 2022-10-20〜2025-06-30 ヒアルロン酸', out)
+        self.assertEqual(self.run_cmd('drugs')[0], '')
+        self.assertIn('目薬名がすべて利用終了', self.run_cmd('drugs -a')[0])
+        self.run_cmd('endname ヒアレイン ヒアルロン酸 --clear')
+        self.assertIn('ヒアレイン', self.run_cmd('drugs')[0])
 
     def test_errors(self):
         _, err, failed = self.run_cmd('in 無い薬 1')

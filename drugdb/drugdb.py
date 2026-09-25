@@ -142,7 +142,7 @@ class DrugDb():
                     'max_days': max_days, 'default_days': default_days,
                     'note': note, 'as_needed': int(as_needed)})
         except sqlite3.IntegrityError as err:
-            raise DrugDbError(f'同じ代表名の目薬が既にあります: {name}') \
+            raise DrugDbError(f'同じ代表目薬名の目薬が既にあります: {name}') \
                 from err
         return cur.lastrowid
 
@@ -169,12 +169,25 @@ class DrugDb():
         """list drugs
 
         JP:
-        薬の一覧。 active_only なら使用終了していないものだけ。
+        薬の一覧。 active_only なら利用中のものだけ(is_active 参照)。
         """
         rows = self.conn.execute(E.LIST_DRUGS).fetchall()
         if active_only:
-            rows = [r for r in rows if r['end_date'] is None]
+            rows = [r for r in rows if self.is_active(r['drug_id'])]
         return rows
+
+    def is_active(self, key, as_of=None) -> bool:
+        """drug is in use
+
+        JP:
+        利用中か。代表目薬名の使用終了日(drug.end_date)が無く、かつ
+        目薬名が1件も無いか、利用中の目薬名が1件以上あるとき。
+        """
+        drug = self.find_drug(key)
+        if drug['end_date'] is not None:
+            return False
+        rows = self.aliases(drug['drug_id'])
+        return not rows or bool(self.active_aliases(drug['drug_id'], as_of))
 
     def update_drug(self, key, **values):
         """update drug columns
@@ -193,7 +206,7 @@ class DrugDb():
                     self.conn.execute(E.UPDATE_DRUG.format(column=column),
                                       {'value': value, 'drug_id': drug_id})
         except sqlite3.IntegrityError as err:
-            raise DrugDbError(f'同じ代表名の目薬が既にあります: '
+            raise DrugDbError(f'同じ代表目薬名の目薬が既にあります: '
                               f"{values.get('name')}") from err
 
     def add_alias(self, key, alias_name: str, start_date=None,
@@ -211,20 +224,52 @@ class DrugDb():
         return cur.lastrowid
 
     def aliases(self, key) -> list[sqlite3.Row]:
-        """alias history, oldest first"""
+        """actual name history, oldest first"""
         drug_id = self.find_drug(key)['drug_id']
         return self.conn.execute(E.LIST_ALIASES,
                                  {'drug_id': drug_id}).fetchall()
+
+    def active_aliases(self, key, as_of=None) -> list[sqlite3.Row]:
+        """actual names in use
+
+        JP:
+        利用中の目薬名(利用終了日が空欄か、as_of(省略時今日)以降)。
+        """
+        day = iso(as_of)
+        return [r for r in self.aliases(key)
+                if r['end_date'] is None or r['end_date'] >= day]
+
+    def end_alias(self, key, alias_name: str, end_date=None) -> int:
+        """set end date of actual name (None: back in use)
+
+        JP:
+        目薬名の利用終了日を設定する。 end_date に '' を渡すと
+        利用中に戻す。同じ名前が複数あれば一番新しいもの。
+        """
+        rows = [r for r in self.aliases(key) if r['alias_name'] == alias_name]
+        if not rows:
+            raise DrugDbError(f'目薬名がありません: {alias_name}')
+        value = None if end_date == '' else iso(end_date)
+        with self.conn:
+            self.conn.execute(E.SET_ALIAS_END, {
+                'end_date': value, 'alias_id': rows[-1]['alias_id']})
+        return rows[-1]['alias_id']
 
     def current_name(self, key) -> str:
         """current drug name
 
         JP:
-        現在の薬の名前。別名が無ければ登録名。
+        現在の目薬名。利用中の名前が複数(切替時期)なら「・」でつなぐ。
+        目薬名が無ければ代表目薬名。すべて利用終了なら最後の名前。
         """
         drug = self.find_drug(key)
         rows = self.aliases(drug['drug_id'])
-        return rows[-1]['alias_name'] if rows else drug['name']
+        if not rows:
+            return drug['name']
+        active = self.active_aliases(drug['drug_id'])
+        if not active:
+            return rows[-1]['alias_name']
+        return '・'.join(r['alias_name'] for r in active)
 
     def add_note(self, key, text: str, note_date=None) -> int:
         """add dated note

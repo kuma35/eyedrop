@@ -161,8 +161,35 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('バックアップ', text)
         self.assertIn('年次更新', text)
         self.assertEqual(self.app.size(), 18)
+        self.app.db.set_meta('font_scale', '1.5')
+        self.assertEqual(self.app.size(), 27)
+        # 以前の設定値(特大)も読める
         self.app.db.set_meta('font_scale', '特大')
         self.assertEqual(self.app.size(), 27)
+
+    def test_change_font(self):
+        self.assertEqual(self.app.scale, 1.0)
+        # 既定より小さくできる(最小 75%)
+        self.app.change_font(-1)
+        self.assertEqual(self.app.scale, 0.9)
+        for _ in range(5):
+            self.app.change_font(-1)
+        self.assertEqual(self.app.scale, 0.75)
+        self.assertEqual(self.texts(self.app.build_topbar().actions)
+                         .count('75%'), 1)
+        # 倍率表示のタップで既定に戻る
+        self.app.reset_font()
+        self.assertEqual(self.app.scale, 1.0)
+        for _ in range(10):
+            self.app.change_font(1)
+        self.assertEqual(self.app.scale, 2.5)  # 最大
+        self.app.change_font(-1)
+        self.assertEqual(self.app.scale, 2.0)
+        bar = self.app.build_topbar()
+        labels = self.texts(bar.actions)
+        self.assertIn('A－', labels)
+        self.assertIn('200%', labels)
+        self.assertIn('A＋', labels)
 
     def test_empty_database(self):
         empty = self.main.EyedropApp(None, Path(self.tmp.name) / 'e.db')

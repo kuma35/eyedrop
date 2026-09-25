@@ -36,9 +36,18 @@ DB_NAME = 'eyedrop.db'
 # 来院時必要本数の表の列名(スマホの幅に収まるよう短く)
 SHORT_SPAN_LABELS = {14: '2週間', 28: '4週間', 60: '2ヶ月'}
 
-# 文字サイズ(倍率)
-FONT_SCALES = {'標準': 1.0, '大': 1.25, '特大': 1.5}
+# 文字サイズの倍率(画面上部の A－ / A＋ で切り替え)
+# 既定(DEFAULT_SCALE)より小さくもできる。倍率表示をタップすると既定に戻る
+FONT_STEPS = (0.75, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5)
+DEFAULT_SCALE = 1.0
+# 以前の設定値(ラジオボタン時代)からの読み替え
+OLD_FONT_SCALES = {'標準': 1.0, '大': 1.25, '特大': 1.5}
 BASE_SIZE = 18
+# 上部バーの文字は倍率に関係なく固定(大きくしてもボタンがはみ出さない)
+TOPBAR_SIZE = 22
+
+# スクロールバー: 太く、常に表示、つまんで動かせる
+SCROLLBAR_THICKNESS = 16
 
 # 高コントラスト(黒地に白)
 DARK_SCHEME = ft.ColorScheme(
@@ -51,6 +60,20 @@ LIGHT_SCHEME = ft.ColorScheme(
     secondary=ft.Colors.TEAL_900, on_secondary=ft.Colors.WHITE,
     surface=ft.Colors.WHITE, on_surface=ft.Colors.BLACK,
     error=ft.Colors.RED_900, on_error=ft.Colors.WHITE)
+
+
+def scrollbar_theme(scheme: ft.ColorScheme) -> ft.ScrollbarTheme:
+    """large, always visible scrollbar
+
+    JP:
+    見やすく大きめのスクロールバー。常に表示し、つまんで動かせる。
+    """
+    return ft.ScrollbarTheme(
+        thickness=SCROLLBAR_THICKNESS, radius=SCROLLBAR_THICKNESS / 2,
+        thumb_visibility=True, track_visibility=True, interactive=True,
+        thumb_color=scheme.primary, track_color=ft.Colors.GREY_800
+        if scheme is DARK_SCHEME else ft.Colors.GREY_300,
+        min_thumb_length=48)
 
 
 def database_path() -> Path:
@@ -88,14 +111,42 @@ class EyedropApp:
         self.detail_drug: Optional[int] = None  # 目薬タブで詳細表示中の薬
         self.share: Optional[ft.Share] = None
         self.picker: Optional[ft.FilePicker] = None
-        self.body = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO,
+        # 縦スクロール(常にスクロールバーを表示)
+        self.body = ft.Column(expand=True, scroll=ft.ScrollMode.ALWAYS,
                               spacing=12)
 
     # ------------------------------------------------------------ 設定
     @property
     def scale(self) -> float:
         """font scale"""
-        return FONT_SCALES.get(self.db.get_meta('font_scale') or '標準', 1.0)
+        value = self.db.get_meta('font_scale') or str(DEFAULT_SCALE)
+        if value in OLD_FONT_SCALES:
+            return OLD_FONT_SCALES[value]
+        try:
+            return float(value)
+        except ValueError:
+            return 1.0
+
+    def change_font(self, step: int):
+        """make font larger (step=1) or smaller (step=-1)
+
+        JP:
+        文字を1段階大きく(step=1)・小さく(step=-1)する。
+        """
+        steps = list(FONT_STEPS)
+        current = min(steps, key=lambda v: abs(v - self.scale))
+        index = max(0, min(len(steps) - 1, steps.index(current) + step))
+        self.db.set_meta('font_scale', str(steps[index]))
+        self.refresh()
+
+    def reset_font(self):
+        """reset font size to default
+
+        JP:
+        文字の大きさを既定(100%)に戻す。
+        """
+        self.db.set_meta('font_scale', str(DEFAULT_SCALE))
+        self.refresh()
 
     def size(self, ratio: float = 1.0) -> float:
         """font size"""
@@ -118,6 +169,44 @@ class EyedropApp:
         return cls(content=self.text(label), icon=icon, on_click=on_click,
                    style=ft.ButtonStyle(padding=ft.Padding.all(14)))
 
+    def build_topbar(self) -> ft.AppBar:
+        """top bar with font size buttons (always shown)
+
+        JP:
+        常に画面上部に出すバー。文字を小さく(A－)・大きく(A＋)するボタンと
+        今の倍率。倍率をタップすると既定(100%)に戻る。
+        バーの文字は倍率に関係なく固定の大きさ。
+        """
+        scale = self.scale
+
+        def font_button(label: str, step: int, tip: str, enabled: bool):
+            return ft.FilledButton(
+                content=ft.Text(label, size=TOPBAR_SIZE,
+                                weight=ft.FontWeight.BOLD),
+                tooltip=tip, disabled=not enabled,
+                style=ft.ButtonStyle(padding=ft.Padding.symmetric(
+                    horizontal=14, vertical=8)),
+                on_click=lambda e: self.change_font(step))
+
+        return ft.AppBar(
+            toolbar_height=64,
+            title=ft.Text(APP_TITLE, size=TOPBAR_SIZE,
+                          weight=ft.FontWeight.BOLD),
+            actions=[
+                font_button('A－', -1, '文字を小さく',
+                            scale > FONT_STEPS[0]),
+                ft.TextButton(
+                    content=ft.Text(f'{scale * 100:.0f}%',
+                                    size=TOPBAR_SIZE - 4),
+                    tooltip='標準(100%)に戻す',
+                    style=ft.ButtonStyle(padding=ft.Padding.symmetric(
+                        horizontal=4)),
+                    on_click=lambda e: self.reset_font()),
+                font_button('A＋', 1, '文字を大きく',
+                            scale < FONT_STEPS[-1]),
+            ],
+            actions_padding=ft.Padding.only(right=8))
+
     # ------------------------------------------------------------ 起動
     def start(self):
         """set up page
@@ -127,9 +216,12 @@ class EyedropApp:
         """
         page = self.page
         page.title = APP_TITLE
-        page.theme = ft.Theme(color_scheme=LIGHT_SCHEME)
+        page.theme = ft.Theme(color_scheme=LIGHT_SCHEME,
+                              scrollbar_theme=scrollbar_theme(LIGHT_SCHEME))
         page.dark_theme = ft.Theme(color_scheme=DARK_SCHEME,
-                                   scaffold_bgcolor=ft.Colors.BLACK)
+                                   scaffold_bgcolor=ft.Colors.BLACK,
+                                   scrollbar_theme=scrollbar_theme(
+                                       DARK_SCHEME))
         page.locale_configuration = ft.LocaleConfiguration(
             supported_locales=[ft.Locale('ja', 'JP')],
             current_locale=ft.Locale('ja', 'JP'))
@@ -171,8 +263,12 @@ class EyedropApp:
             controls = self.build_detail(self.detail_drug)
         else:
             controls = builders[self.tab]()
-        self.body.controls = controls
+        # 縦スクロールバーが内容に重ならないよう右に余白
+        self.body.controls = [ft.Container(
+            padding=ft.Padding.only(right=SCROLLBAR_THICKNESS + 6),
+            content=ft.Column(controls=controls, spacing=12))]
         if self.page is not None:
+            self.page.appbar = self.build_topbar()
             self.apply_theme()
             self.page.floating_action_button = (
                 ft.FloatingActionButton(icon=ft.Icons.ADD,
@@ -209,9 +305,18 @@ class EyedropApp:
     # ------------------------------------------------------------ サマリー
     def table(self, heads: list[str], rows: list[list],
               numeric: tuple[int, ...] = ()) -> ft.Control:
-        """horizontally scrollable data table"""
-        return ft.Row(scroll=ft.ScrollMode.AUTO, controls=[ft.DataTable(
+        """horizontally scrollable data table
+
+        JP:
+        画面からはみ出す表は横スクロール(常にスクロールバーを表示)。
+        横スクロールバーが最終行に重ならないよう下に余白を入れ、
+        行の高さは文字の大きさに合わせる。
+        """
+        data_table = ft.DataTable(
             column_spacing=12, horizontal_margin=4,
+            heading_row_height=self.size(2.4),
+            data_row_min_height=self.size(2.4),
+            data_row_max_height=self.size(2.8),
             heading_text_style=ft.TextStyle(size=self.size(0.9),
                                             weight=ft.FontWeight.BOLD),
             data_text_style=ft.TextStyle(size=self.size()),
@@ -219,7 +324,10 @@ class EyedropApp:
                                    numeric=i in numeric)
                      for i, h in enumerate(heads)],
             rows=[ft.DataRow(cells=[ft.DataCell(content=ft.Text(
-                str(v), no_wrap=True)) for v in row]) for row in rows])])
+                str(v), no_wrap=True)) for v in row]) for row in rows])
+        return ft.Row(scroll=ft.ScrollMode.ALWAYS, controls=[ft.Container(
+            padding=ft.Padding.only(bottom=SCROLLBAR_THICKNESS + 6),
+            content=data_table)])
 
     def build_summary(self) -> list[ft.Control]:
         """summary tab
@@ -559,7 +667,6 @@ class EyedropApp:
         JP:
         データ: バックアップ・復元・年次更新・文字サイズ・表示テーマ。
         """
-        scale = self.db.get_meta('font_scale') or '標準'
         theme = self.db.get_meta('theme_mode') or 'dark'
         return [
             self.heading('バックアップ'),
@@ -579,14 +686,8 @@ class EyedropApp:
             self.button('年次更新', lambda e: self.on_rollover(),
                         icon=ft.Icons.EVENT_REPEAT, filled=False),
             self.heading('表示'),
-            ft.RadioGroup(
-                value=scale,
-                on_change=lambda e: self.run(lambda: self.db.set_meta(
-                    'font_scale', e.control.value)),
-                content=ft.Row(wrap=True, controls=[
-                    ft.Radio(value=k, label=f'文字 {k}',
-                             label_style=ft.TextStyle(size=self.size()))
-                    for k in FONT_SCALES])),
+            self.text('文字の大きさは画面上部の「A－」「A＋」で変えられます。',
+                      0.9),
             ft.Switch(label='黒地に白(高コントラスト)', value=theme != 'light',
                       label_text_style=ft.TextStyle(size=self.size()),
                       on_change=lambda e: self.run(lambda: self.db.set_meta(

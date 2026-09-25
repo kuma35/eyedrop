@@ -1,0 +1,30 @@
+[project]
+name = "eyedrop"
+version = "0.1.0"
+description = "目薬の在庫・ライフタイム管理と来院時必要本数の申告(スマホ版)"
+readme = "../QIITA.md"
+requires-python = ">=3.10"
+authors = [{ name = "kuma35" }]
+license = "MIT"
+dependencies = [
+  "flet==1.0.1",
+]
+
+[tool.flet]
+# Android のパッケージ名は org + project.name になる
+org = "io.github.kuma35"
+product = "目薬管理"
+company = "kuma35"
+copyright = "Copyright (C) 2023-2026 kuma35"
+
+[tool.flet.app]
+path = "src"
+# src/drugdb は ../../drugdb へのリンク。スマホ版に不要なものは入れない
+exclude = [
+  "drugdb/eyedrop.db",
+  "drugdb/cmd_drugdb.sh",
+  "drugdb/__pycache__",
+  "drugdb/sql_edit.py~",
+  "drugdb/sql_table.py~",
+  "__pycache__",
+]

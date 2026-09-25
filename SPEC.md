@@ -26,7 +26,7 @@
 - [ ] リポジトリの URL を決め、QIITA.md のインストール手順に記入
 - [ ] QIITA.md の `private: true` を公開時に `false` へ
 
-## Android 版の検討(2026-09-25、方針決定・未着手)
+## Android 版の検討(2026-09-25、方針決定・実装中)
 
 Kivy にはこだわらない。開発前にツールと配布方法(野良 APK か等)を検討した。
 
@@ -81,6 +81,40 @@ Kivy にはこだわらない。開発前にツールと配布方法(野良 APK 
 - 初回のデータ移行: 今 PC の `eyedrop.db` にある実データを、スマホへ一度だけ取り込む
   (DB ファイルの取り込み機能で対応できる。ods の取り込みはスマホには不要)
 
+
+### 実装(2026-09-25)
+
+- `mobile/`: Flet 1.0.1 のプロジェクト。`mobile/src/main.py` が本体、`mobile/src/drugdb` は
+  `../../drugdb` へのシンボリックリンク(コアを PC 版と共通化)。`mobile/pyproject.toml` が
+  ビルド設定(パッケージ名 `io.github.kuma35.eyedrop`)
+- 画面(下部タブ): サマリー(来院時必要本数・目薬在庫の表、共有ボタンで Markdown を共有) /
+  目薬(開封・入庫・棚卸し・詳細。詳細で開封履歴のイレギュラー切替、在庫記録の削除、推奨期限、
+  名前追加、使用終了、随時使用) / データ(バックアップ保存・共有、復元、年次更新、文字サイズ、テーマ)
+- 既定は黒地に白の高コントラスト、文字は大きめ(標準・大・特大)。設定は DB の meta に保存
+- DB はアプリ用データフォルダ(`FLET_APP_STORAGE_DATA`、更新しても消えない)。
+  バックアップ/復元のロジックは `drugdb/backup.py`(検査してから置き換え、直前の DB は
+  `.before-restore` に残す)
+- 在庫0本で開封したときは、在庫を減らさずに開封し、記録漏れの確認と棚卸しを促す(-1本にしない)
+- テスト: `tests/test_mobile.py`(バックアップ/復元と、端末無しでの画面組み立て)。
+  Web モード + ヘッドレス Chrome で表示と開封操作を確認済み
+
+### ビルドとインストール
+
+```sh
+venv/bin/pip install -r requirements.txt
+cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/build/apk/eyedrop.apk
+~/Android/sdk/platform-tools/adb install -r build/apk/eyedrop.apk  # USB 接続したスマホへ
+```
+
+- 初回のビルドは Flutter 3.44.8・JDK・Android SDK を自動で取り込む(Android SDK は `~/Android/sdk`)。
+  2026-09-25 にビルド成功(APK 約 55MB、arm64-v8a)
+- 手元の端末: シャープ SH-54D(AQUOS sense7、arm64)、Android 16
+- スマホ側の準備: 設定 → デバイス情報 → ビルド番号を7回タップ → 開発者向けオプションで「USB デバッグ」をオン
+- 署名: 今は PC の開発用の鍵(`~/.android/debug.keystore`、自動作成)。更新時は同じ鍵が必要なので、
+  この鍵ファイルはバックアップしておく。正式な鍵(keystore)への切り替えは未決定
+- `mobile/pyproject.toml` の `exclude` で、スマホに不要なファイル(古い DB、`*~` 等)を APK から除外
+
+初回のデータ移行: PC の `eyedrop.db` をスマホにコピーし、データタブの「ファイルから復元」で取り込む。
 
 参考:
 - https://developer.android.com/developer-verification

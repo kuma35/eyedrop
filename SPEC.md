@@ -26,6 +26,68 @@
 - [ ] リポジトリの URL を決め、QIITA.md のインストール手順に記入
 - [ ] QIITA.md の `private: true` を公開時に `false` へ
 
+## Android 版の検討(2026-09-25、方針決定・未着手)
+
+Kivy にはこだわらない。開発前にツールと配布方法(野良 APK か等)を検討した。
+
+### 前提
+
+- コア(`drugdb/`)は Python 標準ライブラリ + SQLite のみ。Python 系のツールならそのまま使い回せる
+- needs.rst の要件: 目が悪くても見やすい(ハイコントラスト・大きな文字)
+
+### ツールの候補
+
+| 方法 | コアの使い回し | 見た目・見やすさ | 手間 | 備考 |
+|---|---|---|---|---|
+| Termux で今の CLI | そのまま | 端末 | ほぼゼロ | 今日から使える。コマンド入力 |
+| **Flet**(Python + Flutter) | ◎ | Material。Android の文字サイズ設定に従う | 小〜中 | `flet build apk`。JDK 17 / Android SDK は初回に自動導入 |
+| BeeWare(Toga) | ◎ | ネイティブ部品 | 中 | 部品がまだ少ない |
+| Kivy + Buildozer | ◎ | 独自。文字サイズ設定に従わない | 中〜大 | 日本語フォント同梱が必要。ビルドが面倒 |
+| Kotlin + Jetpack Compose | ✕(作り直し) | ◎ | 大 | Android Studio が重い。CLI とコード共有不可 |
+| PWA(Web アプリ) | ✕(JS で作り直し) | ○ | 中 | APK 不要。データがブラウザ内で消えやすい |
+
+- Flet の注意: SQLite をアプリのフォルダに置くと更新でデータが消えた事例あり(flet issue #2189)。
+  データ保存用のディレクトリに置くこと
+
+### 配布方法
+
+- 自分用なら**野良 APK で十分**
+  - Google の開発者確認制度: 2026-09-30 からブラジル・インドネシア・シンガポール・タイで開始、
+    日本を含む全世界は 2027 年以降の予定
+  - `adb install`(USB ケーブル経由)は制度の対象外と明言されている
+  - 個人・学生向けの配布用アカウント(身分証・登録料不要、最大20台)もある
+- Play ストア: 登録料 25 ドル(一度)、公開前にテスターによる事前テストが必要、健康関連アプリは申告項目が増える。
+  広告付きで一般公開するときに検討
+
+### おすすめ(案)
+
+1. すぐ使うなら Termux で今の CLI
+2. アプリにするなら Flet。自分で署名した野良 APK を `adb install`
+3. Play ストアは一般公開を決めたときに検討
+
+### 決定事項
+
+- [x] データは **Android 内で完結(スタンドアロン)**。PC との同期はしない
+- [x] サマリーの渡し方は **Android の共有メニュー**(Evernote 等へ送る)。中身は **Markdown**(`report` と同じ)
+- [x] スマホでやる範囲: 開封・入庫・棚卸し・履歴・サマリー表示と共有・バックアップ/復元・年次更新。
+  ods 取り込みはしない(初回は PC の `eyedrop.db` を復元機能で取り込む)
+- [x] iPhone は持っていないので**優先順位は低い**(Flet なら将来 iOS ビルドの余地は残る。Mac が必要)
+  → PWA を選ぶ理由(APK 不要・iPhone 対応)は薄れた。候補は Flet が第一
+
+### スタンドアロンにすることで必要になるもの
+
+- バックアップ: データがスマホにしか無いので、DB ファイルの書き出し(共有・ダウンロードフォルダへ)と
+  復元の機能が必要。機種変更・故障に備える
+- 初回のデータ移行: 今 PC の `eyedrop.db` にある実データを、スマホへ一度だけ取り込む
+  (DB ファイルの取り込み機能で対応できる。ods の取り込みはスマホには不要)
+
+
+参考:
+- https://developer.android.com/developer-verification
+- https://www.androidauthority.com/android-sideloading-changes-timeline-3679204/
+- https://flet.dev/docs/publish/android/
+- https://github.com/flet-dev/flet/issues/2189
+
 ## 開発記録
 
 ### 2026-09-25 コア・CLI の実装(Claude Code との作業)

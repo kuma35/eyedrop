@@ -311,6 +311,23 @@ class TestMobileScreens(unittest.TestCase):
         self.app.db.set_meta('font_scale', '特大')
         self.assertEqual(self.app.size(), 27)
 
+    def test_tablet_default_scale(self):
+        f = self.main.device_default_scale
+        self.assertEqual(f(412, 915), 1.0)        # スマホ
+        self.assertEqual(f(800, 1280), 1.5)       # タブレット(M40)
+        self.assertEqual(f(1280, 800), 1.5)       # 横向き
+        self.assertEqual(f(None, None), 1.0)
+        # タブレットでは設定が無ければ 150% で始まる
+        self.app.default_scale = 1.5
+        self.assertEqual(self.app.scale, 1.5)
+        # 変えたら覚える
+        self.app.change_font(1)
+        self.assertEqual(self.app.scale, 1.75)
+        self.assertEqual(self.app.db.get_meta('font_scale'), '1.75')
+        # 倍率タップで端末の既定(150%)に戻る
+        self.app.reset_font()
+        self.assertEqual(self.app.scale, 1.5)
+
     def test_change_font(self):
         self.assertEqual(self.app.scale, 1.0)
         # 既定より小さくできる(最小 75%)

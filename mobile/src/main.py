@@ -50,6 +50,10 @@ REMAINING_LABEL = '推定残り'
 # 既定(DEFAULT_SCALE)より小さくもできる。倍率表示をタップすると既定に戻る
 FONT_STEPS = (0.75, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5)
 DEFAULT_SCALE = 1.0
+# タブレット(画面の短い辺が TABLET_MIN_DP 以上)の既定の倍率。
+# 白内障などで画面の大きいタブレットを持ち歩く人を想定して最初から大きめ
+TABLET_SCALE = 1.5
+TABLET_MIN_DP = 600
 # 以前の設定値(ラジオボタン時代)からの読み替え
 OLD_FONT_SCALES = {'標準': 1.0, '大': 1.25, '特大': 1.5}
 BASE_SIZE = 18
@@ -123,6 +127,18 @@ def picked_date(value) -> Optional[date]:
     return value
 
 
+def device_default_scale(width, height) -> float:
+    """default font scale by screen size
+
+    JP:
+    画面の大きさ(論理ピクセル=dp)から文字の大きさの既定を決める。
+    短い辺が TABLET_MIN_DP 以上ならタブレットとして TABLET_SCALE。
+    """
+    if width and height and min(width, height) >= TABLET_MIN_DP:
+        return TABLET_SCALE
+    return DEFAULT_SCALE
+
+
 def memo_value(field: ft.TextField) -> Optional[str]:
     """comment text or None if blank"""
     return (field.value or '').strip() or None
@@ -145,6 +161,9 @@ class EyedropApp:
         self.page = page
         self.db_path = db_path
         self.db = DrugDb(str(db_path))
+        # 文字の大きさの既定(端末で決まる。 start でタブレットなら大きくする)。
+        # ユーザーが A－/A＋ で変えたら meta に覚え、以後はそれを使う
+        self.default_scale = DEFAULT_SCALE
         # 終了日なしで残った古い開封(ods 取込由来)を直す。何度実行しても同じ
         self.fixed_stale = self.db.close_stale_lifetimes()
         self.tab = 0
@@ -160,7 +179,9 @@ class EyedropApp:
     @property
     def scale(self) -> float:
         """font scale"""
-        value = self.db.get_meta('font_scale') or str(DEFAULT_SCALE)
+        value = self.db.get_meta('font_scale')
+        if value is None:
+            return self.default_scale
         if value in OLD_FONT_SCALES:
             return OLD_FONT_SCALES[value]
         try:
@@ -211,9 +232,9 @@ class EyedropApp:
         """reset font size to default
 
         JP:
-        文字の大きさを既定(100%)に戻す。
+        文字の大きさをこの端末の既定(スマホは100%、タブレットは150%)に戻す。
         """
-        self.db.set_meta('font_scale', str(DEFAULT_SCALE))
+        self.db.set_meta('font_scale', str(self.default_scale))
         self.refresh()
 
     def size(self, ratio: float = 1.0) -> float:
@@ -312,6 +333,7 @@ class EyedropApp:
         """
         page = self.page
         page.title = APP_TITLE
+        self.default_scale = device_default_scale(page.width, page.height)
         page.theme = ft.Theme(color_scheme=LIGHT_SCHEME,
                               scrollbar_theme=scrollbar_theme(LIGHT_SCHEME))
         page.dark_theme = ft.Theme(color_scheme=DARK_SCHEME,
@@ -969,7 +991,7 @@ class EyedropApp:
         theme = self.db.get_meta('theme_mode') or 'dark'
         return [
             self.heading('バックアップ'),
-            self.text('データはこのスマホの中にだけあります。'
+            self.text('データはこの端末の中にだけあります。'
                       '機種変更や故障に備えて、ときどき保存してください。', 0.9),
             self.button('ファイルに保存', self.on_backup_save,
                         icon=ft.Icons.SAVE),

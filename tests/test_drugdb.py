@@ -399,6 +399,31 @@ class TestReport(DbTestCase):
         self.assertNotIn('|', text)
         self.assertNotIn('#', text)
 
+    def test_ai_export(self):
+        import json
+        from drugdb.ai_export import to_ai_data, to_ai_prompt
+        make_sample(self.db)
+        self.db.add_drug('D', as_needed=True)
+        report = make_report(self.db, today='2024-06-11')
+        data = to_ai_data(report)
+        self.assertEqual(data['基準日'], '2024-06-11')
+        a, b, d = data['目薬']
+        self.assertEqual((a['代表目薬名'], a['目薬名'], a['未開封']),
+                         ('A', 'A-generic', 1))
+        self.assertEqual(a['推定残日数'], 20)
+        self.assertEqual(a['処方依頼本数'],
+                         {'2ヶ月(通常)': 2, '1ヶ月(4週間)': 1, '2週間': 0})
+        self.assertEqual(b['処方依頼本数']['2週間'], '相談')
+        self.assertEqual(d['処方依頼本数']['2週間'], '随時')
+        text = to_ai_prompt(report)
+        self.assertIn('目薬 受診前サマリー 2024-06-11', text)
+        body = text.split('```json')[1].split('```')[0]
+        self.assertEqual(json.loads(body), data)
+        # 注意は日本語の文(内部コードを出さない)
+        self.db.update_drug('A', max_days=5)
+        notes = to_ai_data(make_report(self.db, today='2024-06-11'))['注意']
+        self.assertTrue(any('推奨使用期限' in n for n in notes))
+
     def test_report_name_mode(self):
         make_sample(self.db)
         both = to_markdown(make_report(self.db, today='2024-06-11'))

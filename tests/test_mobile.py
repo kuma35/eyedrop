@@ -183,6 +183,7 @@ class TestMobileScreens(unittest.TestCase):
         menu = self.texts(self.app.build_topbar().leading.items)
         self.assertIn('Markdown をコピー\n(Web用)', menu)
         self.assertIn('テキストをコピー\n(アプリ用)', menu)
+        self.assertIn('Evernote AI 用に\nコピー', menu)
         # 目薬在庫: 経過なし、残日数・通常日数。値の短い列は見出し2段
         tables = [c.controls[0].content for c in controls
                   if isinstance(c, ft.Row) and c.controls

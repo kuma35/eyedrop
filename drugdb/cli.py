@@ -27,6 +27,7 @@ from functools import wraps
 from pathlib import Path
 
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
+from .ai_export import to_ai_prompt
 from .import_ods import import_ods
 from .report import (estimate_text, make_report, opened_text, to_markdown,
                      to_plain_text)
@@ -335,6 +336,8 @@ class DrugDbShell(Cmd):
              ('--plain', {'action': 'store_true',
                           'help': 'Markdown ではなくテキスト版で出力'
                                   '(Evernote アプリなど書式なしで貼る先向け)'}),
+             ('--ai', {'action': 'store_true',
+                       'help': 'Evernote AI 用(指示 + JSON)で出力'}),
              ('-o', '--output', {'default': None, 'metavar': 'FILE',
                                  'help': 'ファイルにも出力'}))
     def do_report(self, args):
@@ -342,7 +345,12 @@ class DrugDbShell(Cmd):
         report = make_report(self.db, today=args.today, span=args.span,
                              next_visit=args.until,
                              margin_days=args.margin)
-        text = to_plain_text(report) if args.plain else to_markdown(report)
+        if args.ai:
+            text = to_ai_prompt(report)
+        elif args.plain:
+            text = to_plain_text(report)
+        else:
+            text = to_markdown(report)
         self.stdout.write(text)
         if args.output:
             Path(args.output).write_text(text, encoding='utf-8')

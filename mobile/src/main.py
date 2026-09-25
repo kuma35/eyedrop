@@ -23,6 +23,7 @@ from typing import Callable, Optional
 
 import flet as ft
 
+from drugdb.ai_export import to_ai_prompt
 from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
@@ -280,7 +281,9 @@ class EyedropApp:
                    action_item('Markdown をコピー\n(Web用)',
                                ft.Icons.CONTENT_COPY, self.on_copy_summary),
                    action_item('テキストをコピー\n(アプリ用)', ft.Icons.NOTES,
-                               self.on_copy_text)])
+                               self.on_copy_text),
+                   action_item('Evernote AI 用に\nコピー', ft.Icons.AUTO_AWESOME,
+                               self.on_copy_ai)])
         return ft.AppBar(
             toolbar_height=64, leading=menu, leading_width=56,
             title=ft.Text(APP_TITLE, size=TOPBAR_SIZE,
@@ -512,6 +515,17 @@ class EyedropApp:
         """
         await self.clipboard.set(to_plain_text(self.report()))
         self.notify('テキストをコピーしました。Evernote アプリに'
+                    '貼り付けてください')
+
+    async def on_copy_ai(self, _e):
+        """copy prompt + JSON for Evernote AI
+
+        JP:
+        Evernote AI 用に、指示(プロンプト)と来院時必要本数・目薬在庫の
+        データ(JSON)をクリップボードにコピーする。
+        """
+        await self.clipboard.set(to_ai_prompt(self.report()))
+        self.notify('Evernote AI 用にコピーしました。Evernote AI に'
                     '貼り付けてください')
 
     # ------------------------------------------------------------ 目薬

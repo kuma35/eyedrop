@@ -116,6 +116,19 @@ cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/bu
 
 初回のデータ移行: PC の `eyedrop.db` をスマホにコピーし、データタブの「ファイルから復元」で取り込む。
 
+### 帰宅後に PC で確認すること(2026-09-25 出先で中断)
+
+- [ ] PC の画面にブラウザのタブが開いたままになっていないか(Web モードでの動作確認で何度か起動したため)
+- [ ] APK が `mobile/build/apk/eyedrop.apk` にあるか
+- [ ] SH-54D で「USB デバッグ」をオンにして PC とつなぎ、`adb devices` で認識されるか
+
+### 再開時に決めること・やること
+
+- [ ] 実機(SH-54D)へのインストールと動作確認(開封・入庫・棚卸し、共有メニューで Evernote へ、
+  バックアップ保存・共有、復元、文字サイズ・テーマ)
+- [ ] 初回のデータ移行(PC の `eyedrop.db` をスマホにコピーして「ファイルから復元」)
+- [ ] 署名の鍵: 今の PC 開発用の鍵のままにするか、自分用の正式な鍵(keystore、パスワードが必要)に切り替えるか
+
 参考:
 - https://developer.android.com/developer-verification
 - https://www.androidauthority.com/android-sideloading-changes-timeline-3679204/

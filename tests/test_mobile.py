@@ -121,6 +121,19 @@ class TestMobileScreens(unittest.TestCase):
             walk(control)
         return '\n'.join(out)
 
+    def test_open_note(self):
+        open_note = self.main.open_note
+        self.assertIn('みてた(空になった)', open_note(True, True))
+        self.assertNotIn('みてた', open_note(False, True))
+        self.assertIn('在庫が0本', open_note(True, False))
+
+    def test_undo_open(self):
+        drug_id = self.app.db.find_drug('A')['drug_id']
+        self.assertIn('開封の取り消し',
+                      self.texts(self.app.build_detail(drug_id)))
+        self.app.run(lambda: self.app.db.undo_open(drug_id))
+        self.assertEqual(self.app.db.opened('A')['use_start'], '2026-01-31')
+
     def test_picked_date(self):
         from datetime import date, datetime, timedelta, timezone
         picked_date = self.main.picked_date

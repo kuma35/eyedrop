@@ -91,6 +91,37 @@ DELETE_LIFETIME = """
 DELETE FROM lifetime WHERE lifetime_id = :lifetime_id;
 """
 
+SET_OPEN_LINK = """
+UPDATE lifetime SET out_stock_id = :out_stock_id,
+    prev_lifetime_id = :prev_lifetime_id
+    WHERE lifetime_id = :lifetime_id;
+"""
+
+# 旧バージョンで開封したものの取り消し用(日付から推定)
+FIND_OPEN_OUT = """
+SELECT * FROM stock WHERE drug_id = :drug_id AND kind = 'out'
+    AND qty = 1 AND stock_date = :stock_date
+    ORDER BY stock_id DESC LIMIT 1;
+"""
+
+FIND_CLOSED_AT = """
+SELECT * FROM lifetime WHERE drug_id = :drug_id AND use_end = :use_end
+    AND lifetime_id <> :lifetime_id
+    ORDER BY use_start DESC, lifetime_id DESC LIMIT 1;
+"""
+
+GET_LIFETIME = """
+SELECT * FROM lifetime WHERE lifetime_id = :lifetime_id;
+"""
+
+GET_STOCK = """
+SELECT * FROM stock WHERE stock_id = :stock_id;
+"""
+
+REOPEN_LIFETIME = """
+UPDATE lifetime SET use_end = NULL WHERE lifetime_id = :lifetime_id;
+"""
+
 LIST_SUMMARY = """
 SELECT * FROM lifetime_summary WHERE drug_id = :drug_id ORDER BY year;
 """

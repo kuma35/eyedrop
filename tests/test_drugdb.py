@@ -293,6 +293,60 @@ class TestDrugDb(DbTestCase):
         self.assertIsNone(rows[0]['use_end'])            # 巻き込まない
         self.assertEqual(rows[1]['use_end'], '2026-10-20')
 
+    def test_undo_open(self):
+        self.db.add_drug('A')
+        self.db.receive('A', 3, '2024-01-01')
+        self.db.open_bottle('A', '2024-01-01')
+        self.db.open_bottle('A', '2024-01-31')
+        done = self.db.undo_open('A')
+        self.assertEqual(done['lifetime']['use_start'], '2024-01-31')
+        rows = self.db.lifetimes('A')
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]['use_end'])            # 使用中に戻る
+        self.assertEqual(self.db.balance('A'), 2)        # 在庫が戻る
+        self.db.undo_open('A')                           # 最初の開封も取消
+        self.assertEqual((self.db.lifetimes('A'), self.db.balance('A')),
+                         ([], 3))
+        with self.assertRaises(DrugDbError):
+            self.db.undo_open('A')
+
+    def test_undo_open_without_stock(self):
+        self.db.add_drug('A')
+        self.db.receive('A', 1, '2024-01-01')
+        self.db.inventory('A', 0, '2024-01-05')
+        self.db.open_bottle('A', '2024-01-10', from_stock=False)
+        self.db.undo_open('A')
+        self.assertEqual(len(self.db.stock_history('A')), 2)  # 在庫は動かない
+
+    def test_undo_open_after_finish(self):
+        self.db.add_drug('A')
+        self.db.open_bottle('A', '2024-01-01', from_stock=False)
+        self.db.finish_bottle('A', '2024-01-05')
+        self.assertIsNone(self.db.last_open('A'))
+        with self.assertRaises(DrugDbError):
+            self.db.undo_open('A')
+
+    def test_undo_open_legacy(self):
+        # 旧バージョンの開封(出庫・前の1本との対応が記録されていない)
+        self.db.add_drug('A')
+        self.db.receive('A', 3, '2024-01-01')
+        self.db.open_bottle('A', '2024-01-01')
+        self.db.open_bottle('A', '2024-01-31')
+        self.db.conn.execute('UPDATE lifetime SET out_stock_id = NULL,'
+                             ' prev_lifetime_id = NULL')
+        self.db.undo_open('A')
+        self.assertEqual(self.db.balance('A'), 2)
+        self.assertIsNone(self.db.lifetimes('A')[0]['use_end'])
+
+    def test_undo_open_stock_rolled_over(self):
+        self.db.add_drug('A')
+        self.db.receive('A', 3, '2024-01-01')
+        self.db.open_bottle('A', '2024-01-01')
+        lifetime = self.db.lifetimes('A')[0]
+        self.db.delete_stock(lifetime['out_stock_id'])   # 年次更新で退避
+        with self.assertRaises(DrugDbError):
+            self.db.undo_open('A')
+
     def test_finish_bottle(self):
         self.db.add_drug('A')
         self.db.open_bottle('A', '2024-01-01', from_stock=False)
@@ -321,7 +375,7 @@ class TestDrugDb(DbTestCase):
         self.db.close()
         self.db = DrugDb(str(self.path / 'test.db'))
         self.assertEqual(len(self.db.list_drugs()), 1)
-        self.assertEqual(self.db.get_meta('schema_version'), '4')
+        self.assertEqual(self.db.get_meta('schema_version'), '5')
 
     def test_migrate_add_as_needed(self):
         path = str(self.path / 'old.db')

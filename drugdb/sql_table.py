@@ -49,6 +49,9 @@ lifetime
 use_end が NULL のものが現在使用中(開封中)です。
 irregular は途中廃棄・紛失・中断など、使用日数の算定根拠に
 使えないレコードを表します。
+out_stock_id, prev_lifetime_id は開封の取り消し用で、開封時に出庫した
+stock_id と使用終了にした前の lifetime_id です(該当無しは 0)。
+NULL は旧バージョンで開封したもの(取り消し時は日付から推定します)。
 
 lifetime_summary
 ----------------
@@ -62,7 +65,7 @@ drug_note
 「両眼再開」「手術後左眼中止」など、日付付きのメモ。
 """
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 DRUG = """
 CREATE TABLE IF NOT EXISTS drug (
@@ -106,7 +109,9 @@ CREATE TABLE IF NOT EXISTS lifetime (
     use_start TEXT NOT NULL,     -- 開封日
     use_end TEXT,                -- 使い切った日。NULLなら使用中
     irregular INTEGER NOT NULL DEFAULT 0,  -- 途中廃棄、紛失、中断等
-    note TEXT
+    note TEXT,
+    out_stock_id INTEGER,        -- 開封時の出庫 stock_id。0なら出庫無し
+    prev_lifetime_id INTEGER     -- 開封時に使用終了にした lifetime_id。0なら無し
 );
 """
 
@@ -148,6 +153,8 @@ CREATE INDEX IF NOT EXISTS lifetime_drug_start
 ADD_COLUMNS = {
     'drug': [('as_needed', 'INTEGER NOT NULL DEFAULT 0')],
     'drug_alias': [('end_date', 'TEXT')],
+    'lifetime': [('out_stock_id', 'INTEGER'),
+                 ('prev_lifetime_id', 'INTEGER')],
 }
 
 # 名前はテーブル名と合わせてください

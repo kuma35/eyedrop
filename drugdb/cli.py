@@ -290,6 +290,13 @@ class DrugDbShell(Cmd):
                             from_stock=not args.no_stock)
         self.print(f'在庫: {self.db.balance(args.drug)}')
 
+    @command(DRUG)
+    def do_undoopen(self, args):
+        """一番新しい開封を取り消す(在庫を戻し、前の1本を使用中に戻す)"""
+        done = self.db.undo_open(args.drug)
+        self.print(f"取り消しました: {done['lifetime']['use_start']} の開封"
+                   f'  在庫: {self.db.balance(args.drug)}')
+
     @command(DRUG, DATE, MEMO,
              ('-i', '--irregular', {'action': 'store_true',
                                     'help': 'イレギュラー(中止・紛失等)'}))

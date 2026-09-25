@@ -389,6 +389,7 @@ class DrugDb():
         """
         drug_id = self.find_drug(key)['drug_id']
         day = iso(open_date)
+        prev_id = out_id = 0
         with self.conn:
             for row in self.conn.execute(E.OPEN_LIFETIME,
                                          {'drug_id': drug_id}).fetchall()[:1]:
@@ -398,14 +399,81 @@ class DrugDb():
                         ' より前です')
                 self.conn.execute(E.CLOSE_LIFETIME, {
                     'use_end': day, 'lifetime_id': row['lifetime_id']})
+                prev_id = row['lifetime_id']
             if from_stock:
-                self.conn.execute(E.NEW_STOCK, {
+                out_id = self.conn.execute(E.NEW_STOCK, {
                     'drug_id': drug_id, 'stock_date': day, 'kind': 'out',
-                    'qty': 1, 'note': note})
+                    'qty': 1, 'note': note}).lastrowid
             cur = self.conn.execute(E.NEW_LIFETIME, {
                 'drug_id': drug_id, 'use_start': day, 'use_end': None,
                 'irregular': 0, 'note': note})
+            self.conn.execute(E.SET_OPEN_LINK, {
+                'out_stock_id': out_id, 'prev_lifetime_id': prev_id,
+                'lifetime_id': cur.lastrowid})
         return cur.lastrowid
+
+    def last_open(self, key):
+        """latest opened lifetime which can be undone (or None)
+
+        JP:
+        取り消せる開封(一番新しいライフタイムが開封中ならそれ)を返す。
+        一番新しいものが使用終了済み(finish_bottle 等)なら None。
+        """
+        drug_id = self.find_drug(key)['drug_id']
+        rows = self.conn.execute(E.LIST_LIFETIME,
+                                 {'drug_id': drug_id}).fetchall()
+        if rows and rows[-1]['use_end'] is None:
+            return rows[-1]
+        return None
+
+    def undo_open(self, key) -> dict:
+        """undo the latest open_bottle
+
+        JP:
+        一番新しい開封を取り消す。開封のライフタイムを削除し、
+        開封時の出庫を削除し(在庫が1本戻る)、開封時に使用終了にした
+        前の1本を使用中に戻す。
+        旧バージョンで開封したもの(out_stock_id が NULL)は、開封日と同じ
+        日付の1本の出庫と、開封日に使用終了したライフタイムを対象とする。
+        開封時の出庫が年次更新で退避済みなら取り消せない。
+        戻り値は {'lifetime': 削除した開封, 'stock_id': 削除した出庫
+        (無ければ None), 'prev_id': 使用中に戻した lifetime_id(無ければ None)}。
+        """
+        drug_id = self.find_drug(key)['drug_id']
+        row = self.last_open(key)
+        if row is None:
+            raise DrugDbError('取り消せる開封がありません')
+        stock_id = prev_id = None
+        if row['out_stock_id'] is None:
+            out = self.conn.execute(E.FIND_OPEN_OUT, {
+                'drug_id': drug_id, 'stock_date': row['use_start']}).fetchone()
+            prev = self.conn.execute(E.FIND_CLOSED_AT, {
+                'drug_id': drug_id, 'use_end': row['use_start'],
+                'lifetime_id': row['lifetime_id']}).fetchone()
+            stock_id = out['stock_id'] if out else None
+            prev_id = prev['lifetime_id'] if prev else None
+        else:
+            if row['out_stock_id']:
+                if self.conn.execute(E.GET_STOCK, {
+                        'stock_id': row['out_stock_id']}).fetchone() is None:
+                    raise DrugDbError(
+                        '開封時の出庫が年次更新で退避済みのため取り消せません')
+                stock_id = row['out_stock_id']
+            prev = self.conn.execute(E.GET_LIFETIME, {
+                'lifetime_id': row['prev_lifetime_id']}).fetchone()
+            # 前の1本が後から修正されていたら戻さない
+            if prev is not None and prev['use_end'] == row['use_start']:
+                prev_id = prev['lifetime_id']
+        with self.conn:
+            self.conn.execute(E.DELETE_LIFETIME,
+                              {'lifetime_id': row['lifetime_id']})
+            if stock_id is not None:
+                self.conn.execute(E.DELETE_STOCK, {'stock_id': stock_id})
+            if prev_id is not None:
+                self.conn.execute(E.REOPEN_LIFETIME,
+                                  {'lifetime_id': prev_id})
+        return {'lifetime': dict(row), 'stock_id': stock_id,
+                'prev_id': prev_id}
 
     def close_stale_lifetimes(self, key=None) -> list[dict]:
         """close old open lifetimes left by import

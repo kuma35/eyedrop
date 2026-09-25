@@ -154,6 +154,26 @@ def md(value: date) -> str:
     return f'{value.month}/{value.day}'
 
 
+def open_note(has_opened: bool, from_stock: bool) -> str:
+    """explanation text of open dialog
+
+    JP:
+    開封ダイアログの説明文。 has_opened は開封中の目薬があるか、
+    from_stock は在庫から出庫するか(在庫0本なら出庫しない)。
+    """
+    if has_opened:
+        text = ('既に開封済みの目薬がみてた(空になった)ので、'
+                '新しい目薬を在庫から1本出して使い始めます'
+                '(みてた(空になった)目薬については開封日(通常は本日)を'
+                '利用終了日として記録し、開封の履歴に追記します)。')
+    else:
+        text = '新しい目薬を在庫から1本出して使い始めます(開封の履歴に追記します)。'
+    if not from_stock:
+        text += ('\nただし未開封の在庫が0本なので、在庫は減らさずに開封します。'
+                 '入庫の記録漏れがないか確認し、必要なら棚卸ししてください。')
+    return text
+
+
 class EyedropApp:
     """mobile app
 
@@ -743,14 +763,35 @@ class EyedropApp:
 
         when = self.date_button(chosen['date'],
                                 lambda d: chosen.update(date=d))
-        if from_stock:
-            note = self.text('在庫から1本出して使い始めます。'
-                             '使っていた1本は使い切りになります。', 0.9)
-        else:
-            note = self.text('未開封の在庫が0本です。在庫は減らさずに開封します。'
-                             '入庫の記録漏れがないか確認し、必要なら棚卸し'
-                             'してください。', 0.9, color=ft.Colors.ERROR)
-        self.ask(f'{name} を開封(出庫)', [note, when, memo], '開封(出庫)', ok)
+        self.ask(f'{name} を開封(出庫)',
+                 [self.text(open_note(self.db.opened(drug_id) is not None,
+                                      from_stock), 0.9,
+                            color=None if from_stock else ft.Colors.ERROR),
+                  when, memo], '開封(出庫)', ok)
+
+    def on_undo_open(self, drug_id: int):
+        """undo latest open dialog
+
+        JP:
+        一番新しい開封の取り消し確認ダイアログ。
+        """
+        row = self.db.last_open(drug_id)
+        if row is None:
+            return
+        name = self.drug_label(drug_id)
+        start = date.fromisoformat(row['use_start'])
+
+        def ok():
+            self.db.undo_open(drug_id)
+            return f'{name}: {md(start)} の開封を取り消しました。' \
+                   f'未開封 {self.db.balance(drug_id)}本'
+
+        self.ask(f'{name} の開封を取り消し',
+                 [self.text(f'{start.isoformat()} の開封を取り消します。'
+                            '開封の履歴からこの1本を削除し、在庫に1本戻します。'
+                            'この開封で空になった(使用終了にした)1本は'
+                            '使用中に戻します。', 0.9)],
+                 '取り消し', ok)
 
     def on_receive(self, drug_id: int):
         """stock in dialog"""
@@ -871,6 +912,11 @@ class EyedropApp:
         controls.append(ft.Column(
             spacing=0, controls=rows,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
+        # 開封の履歴は閲覧のみ。間違えた開封は一番新しいものだけ取り消せる
+        if self.db.last_open(drug_id) is not None:
+            controls.append(self.button(
+                '開封の取り消し', lambda e: self.on_undo_open(drug_id),
+                icon=ft.Icons.UNDO, filled=False))
         # 在庫の履歴は閲覧のみ(訂正は棚卸しで行う)
         controls.append(self.heading('在庫の履歴'))
         labels = {'in': '入庫', 'out': '出庫', 'inventory': '棚卸'}

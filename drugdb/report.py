@@ -171,6 +171,19 @@ def _md_cell(value) -> str:
     return str(value).replace('|', '\\|').replace('\n', ' ')
 
 
+def remaining_text(req: Requirement) -> str:
+    """estimated remaining days text for stock table
+
+    JP:
+    推定残日数。推定を超えて使用中なら「超過N日」。推定できなければ空。
+    """
+    if req.remaining is None:
+        return ''
+    if 'over estimate' in req.info:
+        return f'超過{req.elapsed - req.estimate.days:.0f}日'
+    return f'{req.remaining:.0f}'
+
+
 def stock_table(report: Report) -> list[str]:
     """'目薬在庫' table lines (markdown)
 
@@ -178,19 +191,23 @@ def stock_table(report: Report) -> list[str]:
     「目薬在庫」の表。随時使用の薬は含めない。
     """
     out = ['## 目薬在庫', '',
-           '| 目薬名 | 未開封個数 | 開封分開封日 | 日数 |',
-           '|---|---:|---|---:|']
+           '| 目薬名 | 未開封個数 | 開封分開封日 | 経過日数 | 推定残日数 | 日数 |',
+           '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
         req = line.req
         if req.as_needed:
             continue
         opened = f'{req.opened.month}/{req.opened.day}' if req.opened else ''
         days = '' if line.last_days is None else line.last_days
+        elapsed = '' if req.elapsed is None else req.elapsed
         out.append(f'| {_md_cell(line.name)} | {req.stock} | {opened}'
-                   f' | {days} |')
+                   f' | {elapsed} | {remaining_text(req)} | {days} |')
     out += ['',
             '- 未開封個数…現時点で未開封の個数',
             '- 開封分開封日…現在使用しているのを開封した日',
+            '- 経過日数…開封分開封日から今日までの日数',
+            '- 推定残日数…イレギュラーでない過去の使い切り日数(直近の平均)から'
+            '推定した残り日数',
             '- 日数…直近の使い切り日数(途中廃棄やイレギュラーの場合は空欄)']
     return out
 

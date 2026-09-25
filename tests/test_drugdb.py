@@ -249,6 +249,7 @@ class TestReport(DbTestCase):
         self.assertIn('- B: 在庫2本(使用実績なし。必要数は相談)', text)
         self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 残り約20日 | 30'
                       ' | 2 | 1 |', text)
+        self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
 
     def test_report_as_needed_and_info(self):
         make_sample(self.db)
@@ -260,8 +261,9 @@ class TestReport(DbTestCase):
         self.assertIn('- ヒアレイン: 随時使用・在庫2本', text)
         # 目薬在庫の表: 随時使用は含めない
         table = text.split('## 目薬在庫')[1].split('## お願い')[0]
-        self.assertIn('| A | 1 | 6/1 | 31 |', table)
-        self.assertIn('| B | 2 |  |  |', table)
+        # 7/5 時点 34日経過、推定30日 -> 超過4日
+        self.assertIn('| A | 1 | 6/1 | 34 | 超過4日 | 31 |', table)
+        self.assertIn('| B | 2 |  |  |  |  |', table)
         self.assertNotIn('ヒアレイン', table)
         self.assertIn('| ヒアレイン | 2 | 開封中なし | -(参考) | - | - |',
                       text)

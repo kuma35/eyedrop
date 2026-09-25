@@ -6,6 +6,7 @@ JP:
 flet が入っていなければスキップ。
 """
 import os
+from datetime import date
 import sys
 import tempfile
 import unittest
@@ -247,6 +248,31 @@ class TestMobileScreens(unittest.TestCase):
                          ('利用終了した目薬も表示', True))
         drugs = self.texts(controls)
         self.assertIn('利用終了 2025-06-30', drugs)
+
+    def test_memo_value(self):
+        field = self.app.memo_field()
+        self.assertIsNone(self.main.memo_value(field))
+        field.value = '  '
+        self.assertIsNone(self.main.memo_value(field))
+        field.value = ' 消費期限2027.6 '
+        self.assertEqual(self.main.memo_value(field), '消費期限2027.6')
+        # コメントは在庫の履歴に出る
+        db = self.app.db
+        db.receive('A', 2, '2026-09-24', self.main.memo_value(field))
+        detail = self.texts(self.app.build_detail(
+            db.find_drug('A')['drug_id']))
+        self.assertIn('消費期限2027.6', detail)
+
+    def test_remaining_label(self):
+        db = self.app.db
+        db.add_drug('R')
+        db.add_lifetime('R', '2026-01-01', '2026-01-31')   # 30日/本
+        db.add_lifetime('R', date.today().isoformat())      # 今日開封
+        text = self.texts(self.app.build_drugs())
+        self.assertIn('推定残り約30日', text)
+        drug_id = db.find_drug('R')['drug_id']
+        detail = self.texts(self.app.build_detail(drug_id))
+        self.assertIn('推定残り約30日', detail)
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']

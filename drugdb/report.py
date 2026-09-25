@@ -157,11 +157,12 @@ def request_sentence(line: ReportLine, mode: str = 'both') -> str:
     return f'{name}: 必要{req.need}本・在庫{req.stock}本 (処方不要)'
 
 
-def opened_text(req: Requirement) -> str:
+def opened_text(req: Requirement, remaining_label: str = '残り') -> str:
     """opened bottle status text
 
     JP:
     開封中の状態。例: 「9/10開封 15日経過 残り約11日」
+    remaining_label で「残り」の文言を変えられる(スマホ版は「推定残り」)。
     """
     if req.opened is None:
         return '開封中なし'
@@ -171,7 +172,7 @@ def opened_text(req: Requirement) -> str:
             over = req.elapsed - req.estimate.days
             text += f' (推定より{over:.0f}日長く使えています)'
         else:
-            text += f' 残り約{req.remaining:.0f}日'
+            text += f' {remaining_label}約{req.remaining:.0f}日'
     return text
 
 

@@ -39,6 +39,12 @@ DB_NAME = 'eyedrop.db'
 SHORT_SPAN_LABELS = {14: '2週間', 28: '1ヶ月\n(4週間)', 60: '2ヶ月'}
 UNOPENED_HEAD = '未\n開封'
 
+# コメント欄の最大文字数(一言メモ程度)
+MEMO_MAX = 100
+
+# 開封中の1本の残り日数の文言(推定値であることを明示)
+REMAINING_LABEL = '推定残り'
+
 # 文字サイズの倍率(画面上部の A－ / A＋ で切り替え)
 # 既定(DEFAULT_SCALE)より小さくもできる。倍率表示をタップすると既定に戻る
 FONT_STEPS = (0.75, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5)
@@ -114,6 +120,11 @@ def picked_date(value) -> Optional[date]:
             value = value.astimezone(timezone.utc)
         return (value + timedelta(hours=12)).date()
     return value
+
+
+def memo_value(field: ft.TextField) -> Optional[str]:
+    """comment text or None if blank"""
+    return (field.value or '').strip() or None
 
 
 def md(value: date) -> str:
@@ -519,7 +530,7 @@ class EyedropApp:
             if req.as_needed:
                 status += ' / 随時使用'
             else:
-                status += f' / {opened_text(req)}'
+                status += f' / {opened_text(req, REMAINING_LABEL)}'
             drug_id = line.drug_id
             controls.append(ft.Card(content=ft.Container(
                 padding=ft.Padding.all(12),
@@ -613,6 +624,16 @@ class EyedropApp:
         return ft.OutlinedButton(content=label, icon=ft.Icons.CALENDAR_MONTH,
                                  on_click=open_picker)
 
+    def memo_field(self) -> ft.TextField:
+        """optional comment field
+
+        JP:
+        コメント欄(任意)。在庫記録の note 列に入る。空欄なら NULL で、
+        SQLite では容量をほとんど使わない。
+        """
+        return ft.TextField(label='コメント(任意)', text_size=self.size(),
+                            max_length=MEMO_MAX)
+
     def qty_field(self, initial: int) -> ft.TextField:
         """number field"""
         return ft.TextField(value=str(initial), label='本数', width=120,
@@ -647,8 +668,10 @@ class EyedropApp:
         # 在庫0本での開封は入庫の記録漏れのことが多いので、在庫は減らさない
         from_stock = self.db.balance(drug_id) > 0
 
+        memo = self.memo_field()
+
         def ok():
-            self.db.open_bottle(drug_id, chosen['date'],
+            self.db.open_bottle(drug_id, chosen['date'], memo_value(memo),
                                 from_stock=from_stock)
             return f"{name}: {md(chosen['date'])} 開封。" \
                    f'未開封 {self.db.balance(drug_id)}本'
@@ -662,36 +685,40 @@ class EyedropApp:
             note = self.text('未開封の在庫が0本です。在庫は減らさずに開封します。'
                              '入庫の記録漏れがないか確認し、必要なら棚卸し'
                              'してください。', 0.9, color=ft.Colors.ERROR)
-        self.ask(f'{name} を開封', [note, when], '開封', ok)
+        self.ask(f'{name} を開封', [note, when, memo], '開封', ok)
 
     def on_receive(self, drug_id: int):
         """stock in dialog"""
         chosen = {'date': date.today()}
         name = self.drug_label(drug_id)
         qty = self.qty_field(1)
+        memo = self.memo_field()
 
         def ok():
-            self.db.receive(drug_id, int(qty.value or 0), chosen['date'])
+            self.db.receive(drug_id, int(qty.value or 0), chosen['date'],
+                            memo_value(memo))
             return f'{name}: 入庫。未開封 {self.db.balance(drug_id)}本'
 
         when = self.date_button(chosen['date'],
                                 lambda d: chosen.update(date=d))
-        self.ask(f'{name} を入庫(処方)', [qty, when], '入庫', ok)
+        self.ask(f'{name} を入庫(処方)', [qty, when, memo], '入庫', ok)
 
     def on_inventory(self, drug_id: int):
         """stocktaking dialog"""
         chosen = {'date': date.today()}
         name = self.drug_label(drug_id)
         qty = self.qty_field(self.db.balance(drug_id))
+        memo = self.memo_field()
 
         def ok():
-            self.db.inventory(drug_id, int(qty.value or 0), chosen['date'])
+            self.db.inventory(drug_id, int(qty.value or 0), chosen['date'],
+                              memo_value(memo))
             return f'{name}: 棚卸し。未開封 {self.db.balance(drug_id)}本'
 
         when = self.date_button(chosen['date'],
                                 lambda d: chosen.update(date=d))
         self.ask(f'{name} を棚卸し', [
-            self.text('未開封の本数を入力します。', 0.9), qty, when],
+            self.text('未開封の本数を入力します。', 0.9), qty, when, memo],
             '棚卸し', ok)
 
     def on_add_drug(self, _e):
@@ -741,7 +768,8 @@ class EyedropApp:
                                       bold=True, color=ft.Colors.ERROR))
         controls += self.alias_controls(drug_id)
         controls += [
-            self.text(f'未開封 {req.stock}本 / {opened_text(req)}', 0.95),
+            self.text(f'未開封 {req.stock}本 / '
+                      f'{opened_text(req, REMAINING_LABEL)}', 0.95),
             self.text(f'1本あたり推定 {req.estimate.days:.0f}日'
                       if req.estimate.days else '1本あたり推定: 実績なし', 0.9),
             ft.Switch(label='随時使用', value=bool(drug['as_needed']),

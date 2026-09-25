@@ -435,6 +435,13 @@ class TestReport(DbTestCase):
                       '推奨使用期限の28日を過ぎて', text)
         self.assertNotIn('[警告]', text)
 
+    def test_opened_text_label(self):
+        from drugdb.report import opened_text
+        make_sample(self.db)
+        req = self.db.requirement('A', span=60, today='2024-06-11')
+        self.assertIn(' 残り約20日', opened_text(req))
+        self.assertIn(' 推定残り約20日', opened_text(req, '推定残り'))
+
     def test_report_prescription_limit(self):
         self.db.add_drug('A')
         self.db.add_lifetime('A', '2024-01-01', '2024-01-11')  # 10日/本

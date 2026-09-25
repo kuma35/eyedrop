@@ -301,6 +301,10 @@ def import_sheet(db: DrugDb, name: str,
     _import_names(db, drug_id, name, data, result)
     last_end = _import_lifetimes(db, drug_id, data, result)
     _import_stock(db, drug_id, data, result)
+    # 終了日の欄が空の古い開封は次の開封日で終了(イレギュラー)にする
+    result.warnings += [f"開封 {r['use_start']} に終了日がないため"
+                        f" {r['use_end']} で終了扱い(イレギュラー)"
+                        for r in db.close_stale_lifetimes(drug_id)]
 
     # 開封中が無ければ使用終了とみなす(ライフタイム実績がある薬のみ)
     if result.lifetimes and db.opened(drug_id) is None and last_end:

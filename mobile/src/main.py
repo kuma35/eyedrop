@@ -133,6 +133,8 @@ class EyedropApp:
         self.page = page
         self.db_path = db_path
         self.db = DrugDb(str(db_path))
+        # 終了日なしで残った古い開封(ods 取込由来)を直す。何度実行しても同じ
+        self.fixed_stale = self.db.close_stale_lifetimes()
         self.tab = 0
         self.detail_drug: Optional[int] = None  # 目薬タブで詳細表示中の薬
         self.show_ended = False  # 目薬タブで利用終了した目薬も表示
@@ -320,6 +322,9 @@ class EyedropApp:
             ])
         page.add(ft.SafeArea(content=self.body, expand=True))
         self.refresh()
+        if self.fixed_stale:
+            self.notify(f'終了日のない古い開封記録 {len(self.fixed_stale)}件を、'
+                        '次の開封日で終了(イレギュラー)にしました')
 
     def apply_theme(self):
         """theme mode from settings (default dark)"""
@@ -759,35 +764,53 @@ class EyedropApp:
             self.text('タップでイレギュラー(推定に使わない)を切り替え', 0.8),
         ]
         today = date.today()
+        rows = []
         for row in reversed(self.db.lifetimes(drug_id)):
             start = date.fromisoformat(row['use_start'])
             end = date.fromisoformat(row['use_end']) if row['use_end'] \
                 else None
             days = ((end or today) - start).days
-            label = f"{md(start)} 〜 {md(end) if end else '使用中'}  {days}日"
+            label = (f"{start.isoformat()} 〜 "
+                     f"{end.isoformat() if end else '使用中'}  {days}日")
             if row['irregular']:
                 label += '  (イレギュラー)'
             lifetime_id, irregular = row['lifetime_id'], bool(row['irregular'])
-            controls.append(ft.ListTile(
-                title=self.text(label, color=ft.Colors.ERROR if irregular
-                                else None),
-                subtitle=self.text(row['note'], 0.8) if row['note'] else None,
+            rows.append(self.history_row(
+                label, row['note'], ft.Colors.ERROR if irregular else None,
                 on_click=lambda e, i=lifetime_id, v=irregular:
                     self.run(lambda: self.db.set_irregular(i, not v))))
+        controls.append(ft.Column(
+            spacing=0, controls=rows,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
+        # 在庫の履歴は閲覧のみ(訂正は棚卸しで行う)
         controls.append(self.heading('在庫の履歴'))
         labels = {'in': '入庫', 'out': '出庫', 'inventory': '棚卸'}
+        rows = []
         for row in reversed(self.db.stock_history(drug_id)):
-            stock_id = row['stock_id']
-            controls.append(ft.ListTile(
-                title=self.text(f"{row['stock_date']} {labels[row['kind']]}"
-                                f" {row['qty']}  残{row['balance']}"),
-                subtitle=self.text(row['note'], 0.8) if row['note'] else None,
-                trailing=ft.IconButton(
-                    icon=ft.Icons.DELETE, tooltip='削除',
-                    on_click=lambda e, i=stock_id: self.ask(
-                        '在庫記録を削除', [self.text('この記録を削除します。')],
-                        '削除', lambda: self.db.delete_stock(i)))))
+            label = (f"{row['stock_date']} {labels[row['kind']]}"
+                     f" {row['qty']}  残{row['balance']}")
+            rows.append(self.history_row(label, row['note']))
+        controls.append(ft.Column(
+            spacing=0, controls=rows,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
         return controls
+
+    def history_row(self, label: str, note: Optional[str], color=None,
+                    on_click=None) -> ft.Control:
+        """compact history row with bottom line
+
+        JP:
+        履歴の1行。 ListTile は最低の高さと余白が大きく行間が空くので、
+        余白の少ない行にして下に細い区切り線を引く。
+        """
+        texts = [self.text(label, color=color)]
+        if note:
+            texts.append(self.text(note, 0.8))
+        return ft.Container(
+            content=ft.Column(spacing=0, controls=texts),
+            padding=ft.Padding.symmetric(vertical=6, horizontal=8),
+            border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
+            ink=on_click is not None, on_click=on_click)
 
     def on_max_days(self, drug_id: int):
         """set recommended max days"""
@@ -988,15 +1011,20 @@ class EyedropApp:
         out_dir = self.db_path.parent / 'archive'
 
         def ok():
+            if not year.value:
+                raise ValueError('年を入力してください')
             result = rollover(self.db, int(year.value), out_dir)
             return (f'年次更新しました(在庫記録 {result.stock_archived}件、'
                     f'開封 {result.lifetime_archived}件を退避)。'
                     'データタブからバックアップを保存してください')
 
-        self.ask('年次更新', [
-            self.text('退避した記録は端末内の archive フォルダに残ります。'
-                      '実行前にバックアップを保存しておくと安心です。', 0.9),
-            year], '実行', ok)
+        guard = self.text(
+            '年を指定すると、その年の1月1日より前を退避します。'
+            '在庫は年末の本数を繰り越します。開封の記録は、推定に使う直近3回分を'
+            '必ず残すので、区切りより前の記録が一部残ることがあります。', 0.9)
+        note = self.text('退避した記録は端末内の archive フォルダに残ります。'
+                         '実行前にバックアップを保存しておくと安心です。', 0.9)
+        self.ask('年次更新', [guard, note, year], '実行', ok)
 
 
 def main(page: ft.Page):

@@ -267,6 +267,32 @@ class TestDrugDb(DbTestCase):
                          (1, 10, 20))
         self.assertIsNone(self.db.opened('A', as_of='2023-12-31'))
 
+    def test_close_stale_lifetimes(self):
+        self.db.add_drug('A')
+        # ods 取込で終了日の欄が空だった古い開封
+        self.db.add_lifetime('A', '2022-11-20')
+        self.db.add_lifetime('A', '2022-12-25')
+        self.db.add_lifetime('A', '2023-01-22', '2023-02-17')
+        self.db.add_lifetime('A', '2026-08-20')          # 本当の開封中
+        fixed = self.db.close_stale_lifetimes()
+        self.assertEqual([(r['use_start'], r['use_end']) for r in fixed],
+                         [('2022-11-20', '2022-12-25'),
+                          ('2022-12-25', '2023-01-22')])
+        rows = self.db.lifetimes('A')
+        self.assertEqual([r['irregular'] for r in rows], [1, 1, 0, 0])
+        self.assertIn('終了日なし', rows[0]['note'])
+        self.assertEqual(self.db.opened('A')['use_start'], '2026-08-20')
+        self.assertEqual(self.db.close_stale_lifetimes(), [])  # 2回目は何もしない
+
+    def test_open_closes_only_latest(self):
+        self.db.add_drug('A')
+        self.db.add_lifetime('A', '2022-12-05')          # 古い開封中
+        self.db.add_lifetime('A', '2026-09-25')
+        self.db.open_bottle('A', '2026-10-20', from_stock=False)
+        rows = self.db.lifetimes('A')
+        self.assertIsNone(rows[0]['use_end'])            # 巻き込まない
+        self.assertEqual(rows[1]['use_end'], '2026-10-20')
+
     def test_finish_bottle(self):
         self.db.add_drug('A')
         self.db.open_bottle('A', '2024-01-01', from_stock=False)
@@ -445,7 +471,7 @@ class TestRollover(DbTestCase):
         self.db.receive('A', 2, '2024-01-10')
         before = self.db.balance('A')
         result = rollover(self.db, 2024, self.path / 'archive',
-                          today=date(2024, 2, 1))
+                          today=date(2024, 7, 1))
         self.assertTrue(result.backup.exists())
         with (result.export_dir / 'stock.csv').open(encoding='utf-8') as f:
             self.assertEqual(len(list(csv.reader(f))) - 1,
@@ -455,26 +481,71 @@ class TestRollover(DbTestCase):
         self.assertEqual(history[0]['stock_date'], '2023-12-31')
         self.assertEqual(history[0]['kind'], 'inventory')
         self.assertEqual(result.carried, {'A': 2 + 6 - 7})
-        # 2023年に終了したもの(6本)が退避、2023-07-04開封分は残る
-        self.assertEqual(result.lifetime_archived, 6)
+        # 2023年に終了したもののうち、直近3回の実績(05-05, 06-04, 07-04 開封)
+        # より前の4本だけ退避
+        self.assertEqual(result.lifetime_archived, 4)
         self.assertEqual([r['use_start'] for r in self.db.lifetimes('A')],
-                         ['2023-07-04', '2024-01-19'])
+                         ['2023-05-05', '2023-06-04', '2023-07-04',
+                          '2024-01-19'])
         # 3日の極端に短いものは過去年値に含めない
         summary = self.db.summaries('A')[0]
-        self.assertEqual((summary['year'], summary['count']), (2023, 5))
+        self.assertEqual((summary['year'], summary['count']), (2023, 3))
         self.assertEqual(summary['min_days'], 30)
+
+    def test_rollover_keeps_recent(self):
+        # 年明けすぐに実行しても直近3回分の実績は残る
+        self.db.add_drug('A')
+        self.db.receive('A', 20, '2025-01-01')
+        days = [f'2025-{m:02d}-01' for m in range(1, 13)] + ['2025-12-31']
+        for day in days:
+            self.db.open_bottle('A', day)
+        est = self.db.estimate('A')
+        result = rollover(self.db, 2026, self.path / 'k',
+                          today=date(2026, 1, 3))
+        rows = self.db.lifetimes('A')
+        # 直近3回の実績(10/01, 11/01, 12/01 開封)以降は区切り前でも残る
+        self.assertEqual([r['use_start'] for r in rows],
+                         ['2025-10-01', '2025-11-01', '2025-12-01',
+                          '2025-12-31'])
+        self.assertEqual(result.lifetime_archived, 9)
+        self.assertEqual(self.db.estimate('A').days, est.days)
+        self.assertEqual(self.db.estimate('A').samples, est.samples)
+        # 過去年値には退避した分だけ(残した分は二重に数えない)
+        self.assertEqual(self.db.summaries('A')[0]['count'], 9)
+        self.assertEqual(self.db.balance('A'), 20 - 13)
+
+    def test_rollover_keeps_fewer_when_few(self):
+        self.db.add_drug('A')
+        self.db.add_lifetime('A', '2025-01-01', '2025-02-01')   # 1回だけ
+        rollover(self.db, 2026, self.path / 'f', today=date(2026, 1, 3))
+        self.assertEqual(len(self.db.lifetimes('A')), 1)
+        self.assertEqual(self.db.estimate('A').days, 31)
+        self.db.add_drug('B')
+        self.db.add_lifetime('B', '2025-01-01', '2025-01-10', irregular=True)
+        rollover(self.db, 2026, self.path / 'g', today=date(2026, 1, 3))
+        # 実績0(イレギュラーのみ)なら区切りどおり退避、推定は実績なし
+        self.assertEqual(self.db.lifetimes('B'), [])
+        self.assertIsNone(self.db.estimate('B').days)
 
     def test_rollover_merges_summary(self):
         self.db.add_drug('A')
-        self.db.add_lifetime('A', '2023-01-01', '2023-01-31')
+        for start, end in (('2023-01-01', '2023-01-31'),
+                           ('2023-01-31', '2023-03-12'),
+                           ('2023-03-12', '2023-04-11'),
+                           ('2023-04-11', '2023-05-11')):
+            self.db.add_lifetime('A', start, end)
+        # 1回目: 直近3回を残して 01-01 開封(30日)だけ退避
         rollover(self.db, 2024, self.path / 'a1', today=date(2024, 1, 5))
-        self.db.add_lifetime('A', '2023-12-20', '2024-01-29')
+        self.assertEqual(self.db.summaries('A')[0]['count'], 1)
+        self.db.add_lifetime('A', '2023-05-11', '2023-06-10')
+        self.db.add_lifetime('A', '2023-06-10', '2023-07-10')
+        # 2回目: 01-31 開封(40日)と 03-12 開封(30日)を退避して 2023年に合算
         rollover(self.db, 2025, self.path / 'a2', today=date(2025, 1, 5))
         summary = self.db.summaries('A')[0]
-        self.assertEqual((summary['count'], summary['avg_days'],
-                          summary['max_days']), (2, 35.0, 40))
-        # 実績が無くなっても過去年値で推定できる
-        self.assertEqual(self.db.estimate('A').basis, 'past years')
+        self.assertEqual((summary['year'], summary['count'],
+                          round(summary['avg_days'], 2),
+                          summary['max_days']), (2023, 3, 33.33, 40))
+        self.assertEqual(len(self.db.lifetimes('A')), 3)
 
 
 class TestCli(DbTestCase):

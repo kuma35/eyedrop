@@ -141,6 +141,20 @@ class TestMobileScreens(unittest.TestCase):
         self.assertEqual(picked_date(date(2025, 6, 30)), date(2025, 6, 30))
         self.assertIsNone(picked_date(None))
 
+    def test_fix_stale_on_start(self):
+        path = Path(self.tmp.name) / 'stale.db'
+        with DrugDb(str(path)) as db:
+            db.add_drug('S')
+            db.add_lifetime('S', '2022-11-20')
+            db.add_lifetime('S', '2026-08-20')
+        app = self.main.EyedropApp(None, path)
+        try:
+            self.assertEqual(len(app.fixed_stale), 1)
+            self.assertEqual(app.db.lifetimes('S')[0]['use_end'],
+                             '2026-08-20')
+        finally:
+            app.db.close()
+
     def test_database_path(self):
         env = {'EYEDROP_DB': '', 'FLET_APP_STORAGE_DATA': '/data/app'}
         old = {k: os.environ.get(k) for k in env}
@@ -241,6 +255,23 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('(イレギュラー)', text)
         self.assertIn('使用中', text)
         self.assertIn('在庫の履歴', text)
+        # 開封の履歴は年付き(在庫の履歴と同じ形式)
+        self.assertIn('2026-01-31 〜 2026-03-01  29日', text)
+        # 履歴は閲覧のみ(削除の操作なし)。行は余白の少ない行(ListTile 不使用)
+        self.assertNotIn('削除', text)
+
+        def walk(obj):
+            yield obj
+            child = getattr(obj, 'content', None)
+            if isinstance(child, ft.Control):
+                yield from walk(child)
+            for child in getattr(obj, 'controls', None) or []:
+                yield from walk(child)
+        found = [c for top in self.app.build_detail(drug_id)
+                 for c in walk(top)]
+        self.assertFalse(any(isinstance(c, (ft.ListTile, ft.IconButton))
+                             and getattr(c, 'icon', None) == ft.Icons.DELETE
+                             for c in found))
 
     def test_data_and_font_scale(self):
         text = self.texts(self.app.build_data())

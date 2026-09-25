@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 STOCK_KINDS = ('in', 'out', 'inventory')
 
+# 終了日なしで残った古い開封を直したときのメモ
+STALE_NOTE = '(終了日なしのため次の開封日で終了扱い)'
+
 # 更新を許可する drug の列
 DRUG_COLUMNS = ('name', 'start_date', 'end_date', 'max_days',
                 'default_days', 'as_needed', 'note')
@@ -379,14 +382,16 @@ class DrugDb():
 
         JP:
         新しい1本を開封する。
-        開封中のものがあれば開封日で使用終了とし、新しいライフタイムを
-        開始する。 from_stock なら在庫から1本出庫する。
+        開封中のもの(一番新しい1件)を開封日で使用終了とし、新しい
+        ライフタイムを開始する。 from_stock なら在庫から1本出庫する。
+        古い開封中が残っていても一緒に終わらせない(異常に長い使用期間に
+        なるため。 close_stale_lifetimes 参照)。
         """
         drug_id = self.find_drug(key)['drug_id']
         day = iso(open_date)
         with self.conn:
             for row in self.conn.execute(E.OPEN_LIFETIME,
-                                         {'drug_id': drug_id}).fetchall():
+                                         {'drug_id': drug_id}).fetchall()[:1]:
                 if row['use_start'] > day:
                     raise DrugDbError(
                         f"開封日 {day} が使用中の開封日 {row['use_start']}"
@@ -401,6 +406,41 @@ class DrugDb():
                 'drug_id': drug_id, 'use_start': day, 'use_end': None,
                 'irregular': 0, 'note': note})
         return cur.lastrowid
+
+    def close_stale_lifetimes(self, key=None) -> list[dict]:
+        """close old open lifetimes left by import
+
+        JP:
+        開封中(終了日なし)のまま残った古いライフタイムを直す。
+        一番新しい開封中以外で終了日が無いものは、次の開封日で終了とし、
+        イレギュラー(推定に使わない)にする。 ods で終了日の欄が空だった
+        記録など。 key を省略すると全部の薬。直したものを返す。
+        """
+        drugs = [self.find_drug(key)] if key is not None \
+            else self.list_drugs()
+        fixed = []
+        with self.conn:
+            for drug in drugs:
+                rows = self.conn.execute(E.LIST_LIFETIME, {
+                    'drug_id': drug['drug_id']}).fetchall()
+                for index, row in enumerate(rows[:-1]):
+                    if row['use_end'] is not None:
+                        continue
+                    later = [r['use_start'] for r in rows[index + 1:]
+                             if r['use_start'] > row['use_start']]
+                    if not later:
+                        continue
+                    note = ((row['note'] + ' ') if row['note'] else '') \
+                        + STALE_NOTE
+                    self.conn.execute(
+                        'UPDATE lifetime SET use_end = ?, irregular = 1,'
+                        ' note = ? WHERE lifetime_id = ?',
+                        (later[0], note, row['lifetime_id']))
+                    fixed.append({'name': drug['name'],
+                                  'lifetime_id': row['lifetime_id'],
+                                  'use_start': row['use_start'],
+                                  'use_end': later[0]})
+        return fixed
 
     def finish_bottle(self, key, end_date=None, irregular: bool = False,
                       note=None) -> int:

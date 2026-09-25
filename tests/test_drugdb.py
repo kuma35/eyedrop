@@ -289,14 +289,31 @@ class TestReport(DbTestCase):
         self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 残り約20日 | 30'
                       ' | 3 | 2 |', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
-        # 来院時必要本数: 2週間/4週間/2ヶ月。10日経過・残20日・30日/本
+        # 来院時必要本数: 2ヶ月/1ヶ月(4週間)/2週間。10日経過・残20日・30日/本
         self.assertEqual([r.need for r in report.lines[0].patterns],
-                         [1, 2, 3])
+                         [3, 2, 1])
         # 処方不要は空欄、必要なら「必要N」(N は依頼数)
-        self.assertIn('| A(A-generic) | 1 |  | 必要1 | 必要2 |', text)
+        self.assertIn('| A(A-generic) | 1 | 必要2 | 必要1 |  |', text)
+        self.assertIn('| 目薬名 | 未開封 | 2ヶ月(通常) | 1ヶ月(4週間) | 2週間 |',
+                      text)
         self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
         self.assertLess(text.index('## 来院時必要本数'),
                         text.index('## 目薬在庫'))
+
+    def test_report_name_mode(self):
+        make_sample(self.db)
+        both = to_markdown(make_report(self.db, today='2024-06-11'))
+        self.assertIn('| A(A-generic) | 1 |', both)
+        rep = to_markdown(make_report(self.db, today='2024-06-11',
+                                      name_mode='representative'))
+        self.assertIn('| 代表名 | 未開封 |', rep)
+        self.assertNotIn('A-generic', rep)
+        act = to_markdown(make_report(self.db, today='2024-06-11',
+                                      name_mode='actual'))
+        self.assertIn('| 実際の名前 | 未開封 |', act)
+        self.assertIn('- **A-generic: 必要3本', act)
+        with self.assertRaises(ValueError):
+            make_report(self.db, name_mode='bad')
 
     def test_report_as_needed_and_info(self):
         make_sample(self.db)
@@ -324,7 +341,7 @@ class TestReport(DbTestCase):
         self.db.add_lifetime('A', '2024-01-01', '2024-01-11')  # 10日/本
         report = make_report(self.db, today='2024-06-11', span=60)
         text = to_markdown(report)
-        self.assertIn('| A | 0 | 必要3 | 必要3 | 必要3(不足3) |', text)
+        self.assertIn('| A | 0 | 必要3(不足3) | 必要3 | 必要3 |', text)
         self.assertIn('3本 ください(処方上限3本。3本不足)', text)
         self.assertIn('[警告] A: 処方上限3本では次回受診までに3本不足します',
                       text)

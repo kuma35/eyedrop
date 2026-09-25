@@ -143,10 +143,36 @@ class TestMobileScreens(unittest.TestCase):
 
     def test_drugs(self):
         text = self.texts(self.app.build_drugs())
-        self.assertIn('A(A-generic)', text)
+        # 既定は代表名
+        self.assertIn('A\n', text)
+        self.assertNotIn('A-generic', text)
         self.assertIn('未開封 0本', text)
         self.assertIn('随時使用', text)
         self.assertIn('開封', text)
+
+    def test_name_mode(self):
+        drug_id = self.app.db.find_drug('A')['drug_id']
+        self.assertEqual(self.app.name_mode, 'representative')
+        self.assertEqual(self.app.drug_label(drug_id), 'A')
+        summary = self.texts(self.app.build_summary())
+        self.assertIn('代表名', summary)
+        self.assertNotIn('A-generic', summary)
+        # 画面内一斉切替: 実際に支給される名前
+        self.app.set_name_mode('actual')
+        self.assertEqual(self.app.drug_label(drug_id), 'A-generic')
+        summary = self.texts(self.app.build_summary())
+        self.assertIn('実際の名前', summary)
+        self.assertIn('A-generic', summary)
+        self.assertIn('A-generic', self.texts(self.app.build_drugs()))
+        # 共有する Markdown も切り替わる
+        from drugdb.report import to_markdown
+        self.assertIn('| A-generic |', to_markdown(self.app.report()))
+        # 詳細では両方を表示
+        detail = self.texts(self.app.build_detail(drug_id))
+        self.assertIn('代表名: A', detail)
+        self.assertIn('実際の名前: A-generic (2026-02-01〜)', detail)
+        menu = self.app.build_topbar().leading
+        self.assertEqual([i.checked for i in menu.items], [False, True])
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
@@ -194,8 +220,18 @@ class TestMobileScreens(unittest.TestCase):
     def test_empty_database(self):
         empty = self.main.EyedropApp(None, Path(self.tmp.name) / 'e.db')
         try:
-            self.assertIn('目薬が登録されていません',
-                          self.texts(empty.build_summary()))
+            controls = empty.build_summary()
+            self.assertIn('目薬が登録されていません', self.texts(controls))
+            # データが無くても表(枠線付き)に空の行が1行ある
+            tables = [c.controls[0].content for c in controls
+                      if isinstance(c, ft.Row) and c.controls
+                      and isinstance(getattr(c.controls[0], 'content', None),
+                                     ft.DataTable)]
+            self.assertEqual(len(tables), 2)
+            for table in tables:
+                self.assertEqual(len(table.rows), 1)
+                self.assertIsNotNone(table.border)
+                self.assertIsNotNone(table.vertical_lines)
             self.assertIn('+ で目薬を追加',
                           self.texts(empty.build_drugs()))
         finally:

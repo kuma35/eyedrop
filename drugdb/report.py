@@ -20,12 +20,19 @@ WARNING_TEXT = {
 
 LEVEL_LABEL = {'warning': '[警告]', 'info': '[info]'}
 
+# 目薬名の表示。代表名(登録名。例: コソプト。固定)と実際の名前(実際に支給
+# される薬の名前。例: ドルモロール。変わったら開始日とともに記録)
+NAME_MODES = ('both', 'representative', 'actual')
+NAME_HEAD = {'both': '目薬名', 'representative': '代表名',
+             'actual': '実際の名前'}
+
 # 来院時必要本数申告の期間パターン (表示名, 日数)。毎回すべて推定する。
-# 通常は2ヶ月。病状により2週間と4週間(1ヶ月)
+# 通常は2ヶ月。病状により2週間と1ヶ月(4週間)
+# 表の列の順(通常の2ヶ月を未開封のすぐ隣にするため長い期間から)
 SPAN_PATTERNS = (
-    ('2週間', 14),
-    ('4週間(1ヶ月)', 28),
     ('2ヶ月(通常)', 60),
+    ('1ヶ月(4週間)', 28),
+    ('2週間', 14),
 )
 DEFAULT_SPAN = 60
 
@@ -64,6 +71,7 @@ class Report:
     span: int
     margin_days: int
     lines: list[ReportLine]
+    name_mode: str = 'both'   # NAME_MODES 参照
 
     @property
     def title(self) -> str:
@@ -73,13 +81,15 @@ class Report:
 
 def make_report(db: DrugDb, today=None, span: Optional[int] = None,
                 next_visit=None, margin_days: int = 0,
-                **kwargs) -> Report:
+                name_mode: str = 'both', **kwargs) -> Report:
     """make summary report
 
     JP:
     サマリーを作る。次回受診日は span(日数)または next_visit(日付)で指定。
-    使用終了した薬は含めない。
+    使用終了した薬は含めない。 name_mode は目薬名の表示(NAME_MODES)。
     """
+    if name_mode not in NAME_MODES:
+        raise ValueError(f'name_mode が不正です: {name_mode}')
     today = to_date(today) or date.today()
     if next_visit is not None:
         next_visit = to_date(next_visit)
@@ -98,20 +108,30 @@ def make_report(db: DrugDb, today=None, span: Optional[int] = None,
             drug['drug_id'], drug['name'], db.current_name(drug['drug_id']),
             req, last_days(db.lifetimes(drug['drug_id'], as_of=today)),
             patterns))
-    return Report(today, next_visit, span, margin_days, lines)
+    return Report(today, next_visit, span, margin_days, lines, name_mode)
 
 
 def _fmt_days(value) -> str:
     return '-' if value is None else f'{value:.0f}'
 
 
-def _display_name(line: ReportLine) -> str:
+def line_name(line: ReportLine, mode: str = 'both') -> str:
+    """drug name for display by name mode
+
+    JP:
+    表示する目薬名。 mode は NAME_MODES のいずれか。
+    'both' は「代表名(実際の名前)」(同じなら代表名だけ)。
+    """
+    if mode == 'representative':
+        return line.name
+    if mode == 'actual':
+        return line.current_name
     if line.current_name == line.name:
         return line.name
     return f'{line.name}({line.current_name})'
 
 
-def request_sentence(line: ReportLine) -> str:
+def request_sentence(line: ReportLine, mode: str = 'both') -> str:
     """sentence for the doctor
 
     JP:
@@ -119,7 +139,7 @@ def request_sentence(line: ReportLine) -> str:
     例: 「コソプト: 必要3本・在庫1本なので 2本 ください」
     """
     req = line.req
-    name = _display_name(line)
+    name = line_name(line, mode)
     if req.as_needed:
         text = f'{name}: 随時使用・在庫{req.stock}本'
         if req.estimate.days is not None:
@@ -231,12 +251,13 @@ def pattern_table(report: Report) -> list[str]:
     「来院時必要本数」の表。期間パターンごとの依頼数(必要本数)。
     """
     heads = ' | '.join(f'{label}' for label, _ in SPAN_PATTERNS)
+    mode = report.name_mode
     out = ['## 来院時必要本数', '',
-           f'| 目薬名 | 未開封 | {heads} |',
+           f'| {NAME_HEAD[mode]} | 未開封 | {heads} |',
            '|---|---:|' + '---:|' * len(SPAN_PATTERNS)]
     for line in report.lines:
         cells = ' | '.join(pattern_cell(r) for r in line.patterns)
-        out.append(f'| {_md_cell(_display_name(line))} | {line.req.stock}'
+        out.append(f'| {_md_cell(line_name(line, mode))} | {line.req.stock}'
                    f' | {cells} |')
     out += ['',
             f'- 必要N…処方をお願いする本数(期間中に使う本数 + 予備{SPARE_BOTTLES}'
@@ -253,8 +274,10 @@ def stock_table(report: Report) -> list[str]:
     JP:
     「目薬在庫」の表。随時使用の薬は含めない。
     """
+    mode = report.name_mode
     out = ['## 目薬在庫', '',
-           '| 目薬名 | 未開封個数 | 開封分開封日 | 経過日数 | 推定残日数 | 日数 |',
+           f'| {NAME_HEAD[mode]} | 未開封個数 | 開封分開封日 | 経過日数'
+           ' | 推定残日数 | 日数 |',
            '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
         req = line.req
@@ -263,7 +286,9 @@ def stock_table(report: Report) -> list[str]:
         opened = f'{req.opened.month}/{req.opened.day}' if req.opened else ''
         days = '' if line.last_days is None else line.last_days
         elapsed = '' if req.elapsed is None else req.elapsed
-        out.append(f'| {_md_cell(line.name)} | {req.stock} | {opened}'
+        # 既定(both)ではユーザーの ods と同じく代表名
+        name = line.name if mode == 'both' else line_name(line, mode)
+        out.append(f'| {_md_cell(name)} | {req.stock} | {opened}'
                    f' | {elapsed} | {remaining_text(req)} | {days} |')
     out += ['',
             '- 未開封個数…現時点で未開封の個数',
@@ -282,6 +307,7 @@ def to_markdown(report: Report) -> str:
     Markdown 形式のサマリー。
     依頼がある行(「◯本 ください」)は太字にする。
     """
+    mode = report.name_mode
     span = f'{report.span}日後'
     if report.margin_days:
         span += f' + 余裕{report.margin_days}日'
@@ -291,25 +317,26 @@ def to_markdown(report: Report) -> str:
     out += [''] + stock_table(report)
     out += ['', '## お願い', '']
     for line in report.lines:
-        sentence = request_sentence(line)
+        sentence = request_sentence(line, mode)
         out.append(f'- **{sentence}**' if line.req.request else
                    f'- {sentence}')
+    head = '薬' if mode == 'both' else NAME_HEAD[mode]
     out += ['', '## 詳細', '',
-            '| 薬 | 未開封在庫 | 開封中 | 推定日数/本 | 必要本数 | 依頼数 |',
+            f'| {head} | 未開封在庫 | 開封中 | 推定日数/本 | 必要本数 | 依頼数 |',
             '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
         req = line.req
         days = _fmt_days(req.estimate.days) + ('(参考)' if req.as_needed
                                                else '')
         out.append('| ' + ' | '.join(_md_cell(v) for v in (
-            _display_name(line), req.stock, opened_text(req), days,
+            line_name(line, mode), req.stock, opened_text(req), days,
             '-' if req.need is None else req.need,
             '-' if req.request is None else req.request)) + ' |')
-    notes = [f'- {LEVEL_LABEL[level]} {_display_name(line)}: {text}'
+    notes = [f'- {LEVEL_LABEL[level]} {line_name(line, mode)}: {text}'
              for line in report.lines for level, text in notices(line)]
     if notes:
         out += ['', '## 注意', ''] + notes
     out += ['', '## 推定の根拠', '']
-    out += [f'- {_display_name(line)}: {estimate_text(line.req)}'
+    out += [f'- {line_name(line, mode)}: {estimate_text(line.req)}'
             for line in report.lines]
     return '\n'.join(out) + '\n'

@@ -195,7 +195,7 @@ class DrugDbShell(Cmd):
 
     @command(DRUG, ('name', {'help': '現在の薬の名前'}), DATE, MEMO)
     def do_alias(self, args):
-        """薬の名前(ジェネリック等)を追加"""
+        """実際に支給される名前を変更(代表名はそのまま。-d で開始日)"""
         self.db.add_alias(args.drug, args.name, args.date, args.memo)
 
     @command(DRUG, ('text', {'help': 'メモ'}), DATE)

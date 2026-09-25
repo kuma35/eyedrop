@@ -43,7 +43,7 @@ ignorePublish: false
 - 「たまたま短かった1本」や「途中で中断した1本」で推定が狂わないよう、
   イレギュラーな記録を除外できます
 - キサラタンのように「開封後4週間で廃棄」の目安がある薬は、
-  推奨期限を過ぎると `[info]` で知らせます(推定そのものは実績どおり)
+  廃棄期限を過ぎると `[info]` で知らせます(推定そのものは実績どおり)
 - ヒアレインのように**随時使う薬**は、必要本数を計算せず在庫だけ表示します
 
 # 使用例
@@ -55,7 +55,7 @@ ignorePublish: false
 ```sh
 $ drugdb/cmd_drugdb.sh add 目薬A
 登録しました: 1 目薬A
-$ drugdb/cmd_drugdb.sh add 目薬B --max-days 28     # 開封後4週間が推奨期限
+$ drugdb/cmd_drugdb.sh add 目薬B --max-days 28     # 開封後4週間で廃棄(廃棄期限)
 登録しました: 2 目薬B
 $ drugdb/cmd_drugdb.sh add 目薬C --as-needed       # 随時使用
 登録しました: 3 目薬C
@@ -79,7 +79,7 @@ $ drugdb/cmd_drugdb.sh open 目薬A -d 2026-07-21    # 新しい1本を開封
 ```
 $ drugdb/cmd_drugdb.sh drugs
   1 目薬A  在庫0
-  2 目薬B  在庫0  (推奨期限28日)
+  2 目薬B  在庫0  (廃棄期限28日)
   3 目薬C  在庫2  (随時使用)
 
 $ drugdb/cmd_drugdb.sh life 目薬A
@@ -211,7 +211,7 @@ eyedrop> help report
 
 - 途中廃棄・紛失・中断などは `irregular` で除外できます
 - 極端に短い記録(中央値の 0.7 倍未満)は自動で除外します
-- 開封後の推奨期限(`max_days`)は推定の上限にはしません。
+- 開封後の廃棄期限(`max_days`)は推定の上限にはしません。
   うっかり使い続けることもあるので、超過したら `[info]` で知らせるだけにしています
 
 ## 必要本数と処方をお願いする本数

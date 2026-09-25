@@ -16,7 +16,7 @@ drug
 名前を追加します(drug_id は変えない)。
 
 - end_date: 使用終了日。NULL なら使用中。
-- max_days: 開封後の推奨使用期限日数(例: キサラタンは 28)。NULL なら無し。
+- max_days: 開封後の廃棄期限日数(例: キサラタンは 28 = 4週間で廃棄)。NULL なら無し。
   推定の上限にはせず、超過したら info で知らせるだけ。
 - default_days: 実績が無いときの想定使用日数。
 - as_needed: 随時使用(毎日使うものではない。例: ヒアレイン)なら 1。
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS drug (
     name TEXT NOT NULL UNIQUE,   -- 登録名 例:コソプト
     start_date TEXT,             -- 使用開始日
     end_date TEXT,               -- 使用終了日。NULLなら使用中
-    max_days INTEGER,            -- 開封後推奨使用期限日数 例:28
+    max_days INTEGER,            -- 開封後の廃棄期限日数 例:28
     default_days INTEGER,        -- 実績が無いときの想定使用日数
     note TEXT,
     as_needed INTEGER NOT NULL DEFAULT 0  -- 随時使用

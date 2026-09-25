@@ -13,8 +13,8 @@ Evernote AI 用の書き出し
 """
 import json
 
-from .report import (MAX_PRESCRIPTION, SPAN_PATTERNS, SPARE_BOTTLES, Report,
-                     notices, remaining_text)
+from .report import (MAX_PRESCRIPTION, SPARE_BOTTLES, Report, notices,
+                     remaining_text)
 
 # Evernote AI への指示。 {json} に JSON が入る
 AI_PROMPT = """\
@@ -22,7 +22,7 @@ AI_PROMPT = """\
 このデータから、次の2つの表を含むノート本文を日本語で作ってください。
 
 1. 「来院時必要本数」の表
-   列: 代表目薬名 / 未開封 / 2ヶ月(通常) / 1ヶ月(4週間) / 2週間
+   列: 代表目薬名 / 未開封 / {spans}
    各期間のセルには「処方依頼本数」が1以上なら「必要N」、0なら空欄、
    随時使用の目薬は「随時」、推定できない目薬は「相談」と書く。
 2. 「目薬在庫」の表(随時使用の目薬は除く)
@@ -59,7 +59,7 @@ def to_ai_data(report: Report) -> dict:
     JP:
     Evernote AI に渡すデータ。キーは日本語(表の列名と同じ言葉)。
     """
-    labels = [label for label, _ in SPAN_PATTERNS]
+    labels = report.span_labels()
     drugs = []
     for line in report.lines:
         req = line.req
@@ -109,4 +109,5 @@ def to_ai_prompt(report: Report, prompt: str = AI_PROMPT) -> str:
     """
     data = json.dumps(to_ai_data(report), ensure_ascii=False, indent=1)
     return prompt.replace('{date}', report.today.isoformat()) \
+        .replace('{spans}', ' / '.join(report.span_labels())) \
         .replace('{json}', data)

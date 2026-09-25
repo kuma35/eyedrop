@@ -115,13 +115,13 @@ class TestEstimate(unittest.TestCase):
         req = requirement(-1, est, '2024-06-01', '2024-07-20', 60,
                           max_days=28, spare=0)
         self.assertEqual(req.warnings, ['stock negative'])
-        # 推奨使用期限・推定超過は info のみ
+        # 廃棄期限・推定超過は info のみ
         self.assertEqual(set(req.info), {'over max_days', 'over estimate'})
         self.assertEqual(req.remaining, 0)
         self.assertEqual(req.request, 2)
 
     def test_max_days_does_not_cap_estimate(self):
-        # キサラタン: 推奨28日でも実績32日ならそのまま32日で推定
+        # キサラタン: 廃棄期限28日でも実績32日ならそのまま32日で推定
         est = estimate_days([life('2024-01-01', '2024-02-02')])
         self.assertEqual(est.days, 32)
         req = requirement(0, est, '2024-06-01', '2024-06-30', 60,
@@ -422,7 +422,52 @@ class TestReport(DbTestCase):
         # 注意は日本語の文(内部コードを出さない)
         self.db.update_drug('A', max_days=5)
         notes = to_ai_data(make_report(self.db, today='2024-06-11'))['注意']
-        self.assertTrue(any('推奨使用期限' in n for n in notes))
+        self.assertTrue(any('廃棄期限' in n for n in notes))
+
+    def test_spans(self):
+        from drugdb.report import (DEFAULT_SPANS, default_sub_spans, get_spans,
+                                   parse_spans, set_spans, span_label)
+        self.assertEqual(get_spans(self.db), DEFAULT_SPANS)
+        self.assertEqual([span_label(d) for d in (60, 28, 14, 30, 15, 56)],
+                         ['2ヶ月', '1ヶ月(4週間)', '2週間', '1ヶ月', '15日',
+                          '8週間'])
+        self.assertEqual(span_label(60, normal=True), '2ヶ月(通常)')
+        self.assertEqual(span_label(28, 'short'), '1ヶ月\n(4週間)')
+        self.assertEqual(default_sub_spans(60), (60, 30, 14))
+        self.assertEqual(default_sub_spans(90), (90, 42, 21))
+        self.assertEqual(default_sub_spans(28), (28, 14, 7))
+        from drugdb.report import snap_span, span_to_unit, unit_to_span
+        self.assertEqual([span_to_unit(d) for d in (60, 28, 14, 30, 10)],
+                         [(2, 'ヶ月'), (4, '週間'), (2, '週間'), (1, 'ヶ月'),
+                          (10, '日')])
+        self.assertEqual(unit_to_span(2, 'ヶ月'), 60)
+        self.assertEqual(unit_to_span('3', '週間'), 21)
+        self.assertEqual(unit_to_span(10, '日'), 10)
+        for bad in ((0, '週間'), ('x', '週間'), (1, '年')):
+            with self.assertRaises(ValueError):
+                unit_to_span(*bad)
+        self.assertEqual(snap_span(15), 14)
+        self.assertEqual(snap_span(31), 30)
+        self.assertEqual(snap_span(3), 3)
+        self.assertEqual(parse_spans('90, 45,22'), (90, 45, 22))
+        for bad in ('', 'a', '0', '400', '30,30'):
+            with self.assertRaises(ValueError):
+                parse_spans(bad)
+        # 設定した期間で計算・表示する
+        make_sample(self.db)
+        set_spans(self.db, (90, 45, 21))
+        report = make_report(self.db, today='2024-06-11')
+        self.assertEqual(report.spans, (90, 45, 21))
+        self.assertEqual(report.span, 90)          # お願いは通常の期間
+        self.assertEqual(len(report.lines[0].patterns), 3)
+        text = to_markdown(report)
+        self.assertIn('| 3ヶ月(通常) | 45日 | 3週間 |', text)
+        self.assertIn('■ 来院時必要本数(3ヶ月 / 45日 / 3週間)',
+                      to_plain_text(report))
+        from drugdb.ai_export import to_ai_data, to_ai_prompt
+        self.assertIn('3ヶ月(通常) / 45日 / 3週間', to_ai_prompt(report))
+        self.assertEqual(list(to_ai_data(report)['目薬'][0]['処方依頼本数']),
+                         ['3ヶ月(通常)', '45日', '3週間'])
 
     def test_report_name_mode(self):
         make_sample(self.db)
@@ -457,7 +502,7 @@ class TestReport(DbTestCase):
         self.assertIn('| ヒアレイン | 2 | 開封中なし | -(参考) | - | - |',
                       text)
         self.assertIn('- [info] A(A-generic): 開封から34日経過。'
-                      '推奨使用期限の28日を過ぎて', text)
+                      '廃棄期限(4週間)を過ぎています', text)
         self.assertNotIn('[警告]', text)
 
     def test_opened_text_label(self):

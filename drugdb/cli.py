@@ -160,7 +160,7 @@ class DrugDbShell(Cmd):
             if drug['as_needed']:
                 extra.append('随時使用')
             if drug['max_days']:
-                extra.append(f"推奨期限{drug['max_days']}日")
+                extra.append(f"廃棄期限{drug['max_days']}日")
             if drug['end_date']:
                 extra.append(f"{drug['end_date']}終了")
             elif not self.db.is_active(drug['drug_id']):
@@ -171,7 +171,7 @@ class DrugDbShell(Cmd):
 
     @command(('name', {'help': '登録名'}), DATE,
              ('--max-days', {'type': int,
-                             'help': '開封後推奨使用期限日数(超過で info)'}),
+                             'help': '開封後の廃棄期限日数(超過で info)'}),
              ('--default-days', {'type': int,
                                  'help': '実績が無いときの想定使用日数'}),
              ('--as-needed', {'action': 'store_true',

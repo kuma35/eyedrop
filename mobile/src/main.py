@@ -12,7 +12,7 @@ drugdb パッケージを PC 版と共通で使います。
 
 - サマリー: 来院時必要本数・目薬在庫の表。共有メニューで Markdown を送る
 - 目薬: 開封・入庫・棚卸し。薬ごとの履歴と設定
-- データ: バックアップ・復元・年次更新・文字サイズ・表示テーマ
+- 設定: バックアップ・復元・年次更新・来院時必要本数の期間・表示テーマ
 
 目が悪くても見やすいよう、既定は黒地に白の高コントラストで文字は大きめ。
 """
@@ -27,21 +27,26 @@ from drugdb.ai_export import to_ai_prompt
 from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
-from drugdb.report import (NAME_HEAD, SPAN_PATTERNS, line_name, make_report,
-                           notices, opened_text, to_plain_text,
-                           pattern_cell, remaining_text, to_markdown)
+from drugdb.report import (DEFAULT_SPANS, NAME_HEAD, SPAN_UNITS,
+                           default_sub_spans, get_spans, line_name,
+                           make_report, notices, opened_text, pattern_cell,
+                           remaining_text, set_spans, span_label,
+                           span_to_unit, to_markdown, to_plain_text,
+                           unit_to_span)
 from drugdb.rollover import rollover
 
 APP_TITLE = '目薬管理'
 DB_NAME = 'eyedrop.db'
 
-# 来院時必要本数の表の列名(スマホの幅に収まるよう短く)
-# 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)
-SHORT_SPAN_LABELS = {14: '2週間', 28: '1ヶ月\n(4週間)', 60: '2ヶ月'}
+# 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)。
+# 来院時必要本数の期間の列名は span_label(days, 'short')
 UNOPENED_HEAD = '未\n開封'
 
 # コメント欄の最大文字数(一言メモ程度)
 MEMO_MAX = 100
+
+# 随時使用の表示(毎日ではなく必要なときに使う目薬)
+AS_NEEDED_LABEL = '随時(必要時・頓用;頓服風に使用)'
 
 # 開封中の1本の残り日数の文言(推定値であることを明示)
 REMAINING_LABEL = '推定残り'
@@ -299,11 +304,12 @@ class EyedropApp:
                    menu_item('目薬名で表示(例: ドルモロール)', 'actual'),
                    ft.PopupMenuItem(),  # 区切り線
                    # アイコン付きの項目は折り返されないので2行に分ける
-                   action_item('Markdown をコピー\n(Web用)',
+                   action_item('サマリーを\nMarkdown でコピー',
                                ft.Icons.CONTENT_COPY, self.on_copy_summary),
-                   action_item('テキストをコピー\n(アプリ用)', ft.Icons.NOTES,
+                   action_item('サマリーを\nテキストでコピー', ft.Icons.NOTES,
                                self.on_copy_text),
-                   action_item('Evernote AI 用に\nコピー', ft.Icons.AUTO_AWESOME,
+                   action_item('サマリーを\nEvernote AI 用にコピー',
+                               ft.Icons.AUTO_AWESOME,
                                self.on_copy_ai)])
         return ft.AppBar(
             toolbar_height=64, leading=menu, leading_width=56,
@@ -354,7 +360,7 @@ class EyedropApp:
                 ft.NavigationBarDestination(icon=ft.Icons.WATER_DROP,
                                             label='目薬'),
                 ft.NavigationBarDestination(icon=ft.Icons.SETTINGS,
-                                            label='データ'),
+                                            label='設定'),
             ])
         page.add(ft.SafeArea(content=self.body, expand=True))
         self.refresh()
@@ -398,12 +404,6 @@ class EyedropApp:
             if scroll_top:
                 self.page.run_task(self.body.scroll_to, offset=0)
             self.apply_theme()
-            self.page.floating_action_button = (
-                ft.FloatingActionButton(icon=ft.Icons.ADD,
-                                        bgcolor=ft.Colors.PRIMARY,
-                                        foreground_color=ft.Colors.ON_PRIMARY,
-                                        on_click=self.on_add_drug)
-                if self.tab == 1 and self.detail_drug is None else None)
             self.page.update()
 
     def notify(self, message: str, error: bool = False):
@@ -498,22 +498,26 @@ class EyedropApp:
             self.text(f'{report.today.isoformat()} 時点', 0.9),
             self.heading('来院時必要本数'),
             self.table([NAME_HEAD[mode], UNOPENED_HEAD]
-                       + [SHORT_SPAN_LABELS.get(days, label)
-                          for label, days in SPAN_PATTERNS],
+                       + report.span_labels('short'),
                        pattern_rows, numeric=(1,)),
-            self.text('必要N…処方をお願いする本数(予備1本込み・最大3本)。'
+            self.text(f'今日(来院時)の時点で、次の診察が'
+                      f'{span_label(report.spans[0])}後なら目薬が何本必要かの表。'
+                      '必要N…処方をお願いする本数(予備1本込み・最大3本)。'
                       '空欄は処方不要', 0.8),
             self.heading('目薬在庫'),
             self.table([NAME_HEAD[mode], UNOPENED_HEAD, '開封日', '残\n日数',
                         '通常\n日数'],
                        stock_rows, numeric=(1, 3, 4)),
+            self.text('開封日：現在使っている目薬を開封した日。'
+                      '残日数：今日時点で現在使っている目薬の推定残量(日数)、'
+                      '通常日数：この目薬は通常何日で使い切っているか', 0.8),
         ]
         if notes:
             controls += [self.heading('注意')] + notes
         if not report.lines:
             controls.append(self.text('目薬が登録されていません。'
                                       '「目薬」タブで追加するか、'
-                                      '「データ」タブで復元してください。'))
+                                      '「設定」タブで復元してください。'))
         return controls
 
     async def on_copy_summary(self, _e):
@@ -558,7 +562,9 @@ class EyedropApp:
         目薬: 使用中の薬ごとにカード。開封・入庫・棚卸し・詳細。
         """
         report = self.report()
-        controls = []
+        # 代表目薬名の追加(スクロール部分の先頭)
+        controls = [self.button('目薬追加', self.on_add_drug,
+                                icon=ft.Icons.ADD)]
         for line in report.lines:
             req = line.req
             name = line_name(line, report.name_mode)
@@ -574,7 +580,7 @@ class EyedropApp:
                     self.text(name, 1.2, bold=True),
                     self.text(status, 0.95),
                     ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
-                        self.button('開封',
+                        self.button('開封(出庫)',
                                     lambda e, d=drug_id: self.on_open(d),
                                     icon=ft.Icons.WATER_DROP),
                         self.button('入庫',
@@ -586,9 +592,12 @@ class EyedropApp:
                         self.button('詳細',
                                     lambda e, d=drug_id: self.show_detail(d),
                                     icon=ft.Icons.HISTORY, filled=False),
+                        self.button('利用終了',
+                                    lambda e, d=drug_id: self.on_end(d),
+                                    icon=ft.Icons.STOP_CIRCLE, filled=False),
                     ])]))))
-        if not controls:
-            controls.append(self.text('右下の + で目薬を追加します。'))
+        if not report.lines:
+            controls.append(self.text('上の「目薬追加」で目薬を登録します。'))
         controls.append(ft.Switch(
             label='利用終了した目薬も表示', value=self.show_ended,
             label_text_style=ft.TextStyle(size=self.size()),
@@ -604,9 +613,14 @@ class EyedropApp:
                         self.text(self.drug_label(drug_id), 1.1, bold=True,
                                   color=ft.Colors.OUTLINE),
                         self.text(self.end_text(drug_id), 0.9),
-                        self.button('詳細',
-                                    lambda e, d=drug_id: self.show_detail(d),
-                                    icon=ft.Icons.HISTORY, filled=False)]))))
+                        ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
+                            self.button(
+                                '詳細', lambda e, d=drug_id: self.show_detail(d),
+                                icon=ft.Icons.HISTORY, filled=False),
+                            self.button(
+                                '利用中に戻す',
+                                lambda e, d=drug_id: self.on_restore_use(d),
+                                icon=ft.Icons.PLAY_CIRCLE, filled=False)])]))))
         return controls
 
     def set_show_ended(self, value: bool):
@@ -670,6 +684,19 @@ class EyedropApp:
         return ft.TextField(label='コメント(任意)', text_size=self.size(),
                             max_length=MEMO_MAX)
 
+    def labeled_switch(self, label: str, value: bool, on_change=None):
+        """switch with wrapping label, returns (row, switch)
+
+        JP:
+        長いラベルでもはみ出さず折り返すスイッチ。 Switch の label は
+        折り返さないので、ラベルを別の Text にして横に並べる。
+        """
+        switch = ft.Switch(value=value, on_change=on_change)
+        row = ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                     controls=[switch, ft.Container(
+                         content=self.text(label), expand=True)])
+        return row, switch
+
     def qty_field(self, initial: int) -> ft.TextField:
         """number field"""
         return ft.TextField(value=str(initial), label='本数', width=120,
@@ -688,8 +715,10 @@ class EyedropApp:
             self.page.pop_dialog()
             self.run(on_ok)
 
+        # 中身が長いとき・キーボードが出たときはダイアログの中をスクロール
         self.page.show_dialog(ft.AlertDialog(
-            modal=True, title=self.text(title, 1.2, bold=True),
+            modal=True, scrollable=True,
+            title=self.text(title, 1.2, bold=True),
             content=ft.Column(tight=True, spacing=12, controls=controls),
             actions=[ft.TextButton(content=self.text('キャンセル'),
                                    on_click=lambda e: self.page.pop_dialog()),
@@ -721,7 +750,7 @@ class EyedropApp:
             note = self.text('未開封の在庫が0本です。在庫は減らさずに開封します。'
                              '入庫の記録漏れがないか確認し、必要なら棚卸し'
                              'してください。', 0.9, color=ft.Colors.ERROR)
-        self.ask(f'{name} を開封', [note, when, memo], '開封', ok)
+        self.ask(f'{name} を開封(出庫)', [note, when, memo], '開封(出庫)', ok)
 
     def on_receive(self, drug_id: int):
         """stock in dialog"""
@@ -763,12 +792,11 @@ class EyedropApp:
                             text_size=self.size(1.1), autofocus=True)
         actual = ft.TextField(label='目薬名(任意。例: ドルモロール)',
                               text_size=self.size())
-        max_days = ft.TextField(label='開封後の推奨期限(日・任意)',
+        max_days = ft.TextField(label='開封後の廃棄期限(日・任意)',
                                 text_size=self.size(),
                                 keyboard_type=ft.KeyboardType.NUMBER,
                                 input_filter=ft.NumbersOnlyInputFilter())
-        as_needed = ft.Switch(label='随時使用', value=False,
-                              label_text_style=ft.TextStyle(size=self.size()))
+        as_needed_row, as_needed = self.labeled_switch(AS_NEEDED_LABEL, False)
 
         def ok():
             if not (name.value or '').strip():
@@ -781,7 +809,13 @@ class EyedropApp:
                 self.db.add_alias(drug_id, actual.value.strip())
             return f'{name.value.strip()} を追加しました'
 
-        self.ask('目薬を追加', [name, actual, max_days, as_needed], '追加', ok)
+        note = self.text(
+            '代表目薬名(例: コソプト)を登録します。同じ効き目の薬をまとめる名前で、'
+            'あとから変わりません。実際に支給される目薬(ジェネリックなど。例: '
+            'ドルモロール)がこの後に変わったときは、ここではなく、各目薬の'
+            '「詳細」の「目薬を追加」で追加します。', 0.9)
+        self.ask('目薬追加(代表目薬名の追加)',
+                 [note, name, actual, max_days, as_needed_row], '追加', ok)
 
     # ------------------------------------------------------------ 詳細
     def build_detail(self, drug_id: int) -> list[ft.Control]:
@@ -808,22 +842,13 @@ class EyedropApp:
                       f'{opened_text(req, REMAINING_LABEL)}', 0.95),
             self.text(f'1本あたり推定 {req.estimate.days:.0f}日'
                       if req.estimate.days else '1本あたり推定: 実績なし', 0.9),
-            ft.Switch(label='随時使用', value=bool(drug['as_needed']),
-                      label_text_style=ft.TextStyle(size=self.size()),
-                      on_change=lambda e: self.run(lambda: self.db.update_drug(
-                          drug_id, as_needed=int(e.control.value)))),
-            ft.Row(wrap=True, spacing=8, controls=[
-                self.button('推奨期限', lambda e: self.on_max_days(drug_id),
-                            icon=ft.Icons.TIMER, filled=False),
-                self.button('目薬名を追加',
-                            lambda e: self.on_alias(drug_id),
-                            icon=ft.Icons.LABEL, filled=False),
-                self.button('利用中に戻す', lambda e: self.run(
-                    lambda: self.db.update_drug(drug_id, end_date=None)),
-                            icon=ft.Icons.PLAY_CIRCLE, filled=False)
-                if drug['end_date'] else
-                self.button('利用終了', lambda e: self.on_end(drug_id),
-                            icon=ft.Icons.STOP_CIRCLE, filled=False)]),
+            self.labeled_switch(
+                AS_NEEDED_LABEL, bool(drug['as_needed']),
+                lambda e: self.run(lambda: self.db.update_drug(
+                    drug_id, as_needed=int(e.control.value))))[0],
+            # 代表目薬名ごとの利用終了・取り消しは目薬タブのカードで行う
+            self.button('廃棄期限設定', lambda e: self.on_max_days(drug_id),
+                        icon=ft.Icons.TIMER, filled=False),
             self.heading('開封の履歴'),
             self.text('タップでイレギュラー(推定に使わない)を切り替え', 0.8),
         ]
@@ -880,23 +905,26 @@ class EyedropApp:
         """set recommended max days"""
         drug = self.db.find_drug(drug_id)
         field = ft.TextField(value=str(drug['max_days'] or ''),
-                             label='開封後の推奨期限(日・空欄で無し)',
+                             label='開封後の廃棄期限(日・空欄で無し)',
                              text_size=self.size(),
                              keyboard_type=ft.KeyboardType.NUMBER,
                              input_filter=ft.NumbersOnlyInputFilter())
-        self.ask('推奨期限', [field], '設定', lambda: self.db.update_drug(
+        self.ask('廃棄期限設定', [field], '設定', lambda: self.db.update_drug(
             drug_id, max_days=int(field.value) if field.value else None))
 
     def alias_controls(self, drug_id: int) -> list[ft.Control]:
         """actual names with period and end/restore buttons
 
         JP:
-        目薬名の一覧。利用期間と、利用中なら「利用終了」、
-        利用終了なら「利用中に戻す」ボタン。
+        目薬名の一覧。利用期間と、利用中なら「利用終了する」、
+        利用終了なら「利用中に戻す」ボタン。末尾に「目薬を追加」。
         """
         rows = self.db.aliases(drug_id)
         if not rows:
-            return [self.text('目薬名: 代表目薬名と同じ', 0.9)]
+            return [self.text('目薬名: 代表目薬名と同じ', 0.9),
+                    self.button('目薬を追加',
+                                lambda e: self.on_alias(drug_id),
+                                icon=ft.Icons.LABEL, filled=False)]
         active = {r['alias_id'] for r in self.db.active_aliases(drug_id)}
         controls = [self.text('目薬名:', 0.9)]
         for row in reversed(rows):
@@ -907,7 +935,7 @@ class EyedropApp:
                 else row['end_date'])
             if in_use:
                 action = ft.TextButton(
-                    content=self.text('利用終了', 0.9),
+                    content=self.text('利用終了する', 0.9),
                     on_click=lambda e, n=name: self.on_alias_end(drug_id, n))
             else:
                 action = ft.TextButton(
@@ -918,6 +946,10 @@ class EyedropApp:
                 title=self.text(name, 1.0, bold=in_use,
                                 color=None if in_use else ft.Colors.OUTLINE),
                 subtitle=self.text(period, 0.8), trailing=action))
+        # 目薬(実際に支給される目薬名)の追加は目薬名リストの末尾
+        controls.append(self.button('目薬を追加',
+                                    lambda e: self.on_alias(drug_id),
+                                    icon=ft.Icons.LABEL, filled=False))
         return controls
 
     def on_alias_end(self, drug_id: int, alias_name: str):
@@ -963,30 +995,71 @@ class EyedropApp:
         note = self.text(f"代表目薬名({self.db.find_drug(drug_id)['name']})は"
                          '変わりません。前の名前は、使い切ったら'
                          '「利用終了」にしてください。', 0.9)
-        self.ask('目薬名を追加', [note, field, when], '追加', ok)
+        self.ask('目薬を追加', [note, field, when], '追加', ok)
 
     def on_end(self, drug_id: int):
-        """end using drug (representative name)"""
-        name = self.drug_label(drug_id)
+        """end using the whole representative drug
+
+        JP:
+        代表目薬名ごと(その目薬名すべて)を利用終了にする。
+        目薬名1つだけを終わらせるのは詳細画面の目薬名の「利用終了」。
+        """
+        drug = self.db.find_drug(drug_id)
+        names = [r['alias_name'] for r in self.db.active_aliases(drug_id)]
+        group = f"代表目薬名 {drug['name']}"
+        if names:
+            group += f"(目薬名 {'・'.join(names)})"
         chosen = {'date': date.today()}
 
         def ok():
             self.db.update_drug(drug_id, end_date=chosen['date'])
-            return f'{name} を利用終了にしました'
+            return f"{drug['name']} を利用終了にしました"
 
         when = self.date_button(chosen['date'],
                                 lambda d: chosen.update(date=d),
                                 prefix='利用終了日')
-        self.ask('利用終了', [self.text(
-            f'{name} を利用終了にし、サマリーに出さないようにします。', 0.9),
-            when], '利用終了', ok)
+        note = self.text(
+            f'{group}をまるごと利用終了にし、サマリーに出さないようにします。'
+            '目薬名1つだけ(ジェネリックの切り替えなど)を終えるときは、'
+            '詳細画面で目薬名の右の「利用終了」を使ってください。'
+            '取り消すときは「利用終了した目薬も表示」から'
+            '「利用中に戻す」を押します。', 0.9)
+        self.ask(f"{drug['name']} をまるごと利用終了", [note, when], '利用終了',
+                 ok)
 
-    # ------------------------------------------------------------ データ
+    def on_restore_use(self, drug_id: int):
+        """undo end of representative drug
+
+        JP:
+        利用終了を取り消す。代表目薬名の利用終了日があればそれを消す。
+        目薬名がすべて利用終了して終わっている場合は、最後に終わった
+        目薬名を利用中に戻す。
+        """
+        drug = self.db.find_drug(drug_id)
+        ended = [r for r in self.db.aliases(drug_id) if r['end_date']]
+        if drug['end_date']:
+            detail = '利用終了を取り消します。'
+        else:
+            last = max(ended, key=lambda r: r['end_date'])
+            detail = (f"目薬名がすべて利用終了しているので、最後に終わった"
+                      f"目薬名 {last['alias_name']} を利用中に戻します。")
+
+        def ok():
+            if drug['end_date']:
+                self.db.update_drug(drug_id, end_date=None)
+            else:
+                self.db.end_alias(drug_id, last['alias_name'], '')
+            return f"{drug['name']} を利用中に戻しました"
+
+        self.ask(f"{drug['name']} を利用中に戻す", [self.text(detail, 0.9)],
+                 '利用中に戻す', ok)
+
+    # ------------------------------------------------------------ 設定
     def build_data(self) -> list[ft.Control]:
         """data tab
 
         JP:
-        データ: バックアップ・復元・年次更新・文字サイズ・表示テーマ。
+        設定: バックアップ・復元・年次更新・来院時必要本数の期間・表示テーマ。
         """
         theme = self.db.get_meta('theme_mode') or 'dark'
         return [
@@ -1006,6 +1079,9 @@ class EyedropApp:
             self.text('指定した年より前の記録を退避し、在庫を繰り越します。', 0.9),
             self.button('年次更新', lambda e: self.on_rollover(),
                         icon=ft.Icons.EVENT_REPEAT, filled=False),
+            self.heading('来院時必要本数の期間'),
+            self.text('次の診察までの期間を月・週・日で指定します。', 0.9),
+            *self.span_controls(),
             self.heading('表示'),
             self.text('文字の大きさは画面上部の「A－」「A＋」で変えられます。',
                       0.9),
@@ -1016,6 +1092,68 @@ class EyedropApp:
                           'dark' if e.control.value else 'light'))),
             self.text(f'データの場所: {self.db_path}', 0.7),
         ]
+
+    def span_controls(self) -> list[ft.Control]:
+        """span setting fields (number + unit)
+
+        JP:
+        来院時必要本数の期間の設定欄。次回診察日は月単位・週単位で決まるので
+        「数 + 単位(ヶ月/週間/日)」で入れる(1ヶ月=30日、1週間=7日で換算)。
+        通常の期間を変えると残り2つに半分・さらに半分(単位に合わせて丸める)を
+        自動で入れる。
+        """
+        spans = list(get_spans(self.db))
+        spans += [0] * (3 - len(spans))
+        rows = []
+
+        def span_row(label: str, days: int):
+            number, unit = span_to_unit(days) if days else ('', '週間')
+            num = ft.TextField(value=str(number), label=label, width=110,
+                               text_size=self.size(1.1),
+                               keyboard_type=ft.KeyboardType.NUMBER,
+                               input_filter=ft.NumbersOnlyInputFilter())
+            unit_box = ft.Dropdown(
+                value=unit, width=130, text_size=self.size(),
+                options=[ft.DropdownOption(key=u, text=u) for u in SPAN_UNITS])
+            rows.append((num, unit_box))
+            return ft.Row(spacing=8, controls=[num, unit_box])
+
+        controls = [span_row('通常', spans[0]), span_row('2つ目', spans[1]),
+                    span_row('3つ目', spans[2])]
+
+        def normal_changed(_e):
+            num, unit_box = rows[0]
+            try:
+                normal = unit_to_span(num.value, unit_box.value)
+            except ValueError:
+                return
+            subs = default_sub_spans(normal)[1:]
+            for (sub_num, sub_unit), days in zip(rows[1:], subs):
+                sub_num.value, sub_unit.value = map(str, span_to_unit(days))
+                sub_num.update()
+                sub_unit.update()
+
+        rows[0][0].on_change = normal_changed
+        rows[0][1].on_select = normal_changed
+
+        def save(_e):
+            def ok():
+                days = [unit_to_span(num.value, unit_box.value)
+                        for num, unit_box in rows if (num.value or '').strip()]
+                saved = set_spans(self.db, days)
+                return '期間を ' + ' / '.join(span_label(d) for d in saved) \
+                    + ' にしました'
+            self.run(ok)
+
+        def reset(_e):
+            self.run(lambda: set_spans(self.db, DEFAULT_SPANS) and
+                     '期間を元に戻しました(2ヶ月 / 4週間 / 2週間)')
+
+        return controls + [
+            ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
+                self.button('期間を設定', save, icon=ft.Icons.CHECK),
+                self.button('元に戻す', reset, icon=ft.Icons.UNDO,
+                            filled=False)])]
 
     async def on_backup_save(self, _e):
         """save backup via save dialog"""
@@ -1080,7 +1218,7 @@ class EyedropApp:
             result = rollover(self.db, int(year.value), out_dir)
             return (f'年次更新しました(在庫記録 {result.stock_archived}件、'
                     f'開封 {result.lifetime_archived}件を退避)。'
-                    'データタブからバックアップを保存してください')
+                    '設定タブからバックアップを保存してください')
 
         guard = self.text(
             '年を指定すると、その年の1月1日より前を退避します。'

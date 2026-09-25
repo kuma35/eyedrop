@@ -181,9 +181,9 @@ class TestMobileScreens(unittest.TestCase):
         # コピーはハンバーガーメニューへ移したので画面には無い
         self.assertNotIn('をコピー', text)
         menu = self.texts(self.app.build_topbar().leading.items)
-        self.assertIn('Markdown をコピー\n(Web用)', menu)
-        self.assertIn('テキストをコピー\n(アプリ用)', menu)
-        self.assertIn('Evernote AI 用に\nコピー', menu)
+        self.assertIn('サマリーを\nMarkdown でコピー', menu)
+        self.assertIn('サマリーを\nテキストでコピー', menu)
+        self.assertIn('サマリーを\nEvernote AI 用にコピー', menu)
         # 目薬在庫: 経過なし、残日数・通常日数。値の短い列は見出し2段
         tables = [c.controls[0].content for c in controls
                   if isinstance(c, ft.Row) and c.controls
@@ -203,7 +203,9 @@ class TestMobileScreens(unittest.TestCase):
         self.assertNotIn('A-generic', text)
         self.assertIn('未開封 0本', text)
         self.assertIn('随時使用', text)
-        self.assertIn('開封', text)
+        self.assertIn('開封(出庫)', text)
+        # 代表目薬名ごとの利用終了は目薬タブのカードにある
+        self.assertIn('利用終了', text)
 
     def test_name_mode(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
@@ -249,6 +251,19 @@ class TestMobileScreens(unittest.TestCase):
                          ('利用終了した目薬も表示', True))
         drugs = self.texts(controls)
         self.assertIn('利用終了 2025-06-30', drugs)
+        # 利用終了した目薬のカードに「利用中に戻す」(取り消し)
+        self.assertIn('利用中に戻す', drugs)
+        # 詳細画面には代表目薬名ごとの利用終了ボタンは無い
+        detail_a = self.texts(self.app.build_detail(
+            db.find_drug('A')['drug_id']))
+        self.assertIn('廃棄期限設定', detail_a)
+        # 「目薬を追加」は目薬名リストの末尾(A-generic の直下)
+        self.assertIn('A-generic\n2026-02-01〜利用中\n利用終了する\n目薬を追加',
+                      detail_a)
+        # 長いラベルは折り返せるよう Text として並べる
+        self.assertIn('随時(必要時・頓用;頓服風に使用)', detail_a)
+        self.assertEqual(detail_a.count('利用終了'), 1)   # 目薬名の右だけ
+        self.assertNotIn('推奨期限', detail_a)
 
     def test_memo_value(self):
         field = self.app.memo_field()
@@ -274,6 +289,36 @@ class TestMobileScreens(unittest.TestCase):
         drug_id = db.find_drug('R')['drug_id']
         detail = self.texts(self.app.build_detail(drug_id))
         self.assertIn('推定残り約30日', detail)
+
+    def test_todo_labels_and_spans(self):
+        from drugdb.report import get_spans
+        # 目薬タブの先頭に「目薬追加」(フロートボタンは無い)
+        controls = self.app.build_drugs()
+        first = controls[0]
+        self.assertIsInstance(first, (ft.FilledButton, ft.OutlinedButton))
+        self.assertEqual(first.content.value, '目薬追加')
+        # サマリーの説明文
+        text = self.texts(self.app.build_summary())
+        self.assertIn('今日(来院時)の時点で、次の診察が2ヶ月後なら'
+                      '目薬が何本必要かの表。', text)
+        self.assertIn('開封日：現在使っている目薬を開封した日。', text)
+        self.assertIn('通常日数：この目薬は通常何日で使い切っているか', text)
+        # 設定タブで期間を設定
+        data = self.app.build_data()
+        rows = [top.controls for top in data if isinstance(top, ft.Row)
+                and top.controls and isinstance(top.controls[0], ft.TextField)]
+        self.assertEqual([(r[0].value, r[1].value) for r in rows],
+                         [('2', 'ヶ月'), ('4', '週間'), ('2', '週間')])
+        self.app.db.set_meta('spans', '90,45,22')
+        self.assertEqual(get_spans(self.app.db), (90, 45, 22))
+        summary = self.app.build_summary()
+        self.assertIn('次の診察が3ヶ月後なら', self.texts(summary))
+        table = [c.controls[0].content for c in summary
+                 if isinstance(c, ft.Row) and c.controls
+                 and isinstance(getattr(c.controls[0], 'content', None),
+                                ft.DataTable)][0]
+        self.assertEqual([col.label.value for col in table.columns][2:],
+                         ['3ヶ月', '45日', '22日'])
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
@@ -367,7 +412,7 @@ class TestMobileScreens(unittest.TestCase):
                 self.assertEqual(len(table.rows), 1)
                 self.assertIsNotNone(table.border)
                 self.assertIsNotNone(table.vertical_lines)
-            self.assertIn('+ で目薬を追加',
+            self.assertIn('「目薬追加」で目薬を登録',
                           self.texts(empty.build_drugs()))
         finally:
             empty.db.close()

@@ -12,7 +12,7 @@ DB に依存しない計算ロジック。
 ただし極端に短い実績(中央値 * short_ratio 未満)は除外する。
 直近実績が無ければ年次更新で退避した過去年値(lifetime_summary)、
 それも無ければ drug.default_days を使う。
-開封後の推奨使用期限(max_days)は推定の上限にはしない(うっかり使い続ける
+開封後の廃棄期限(max_days)は推定の上限にはしない(うっかり使い続ける
 こともあるので実績どおりに推定する)。超過は info として知らせるだけ。
 
 必要本数
@@ -180,7 +180,7 @@ class Requirement:
     spare: int = 0                   # 予備の本数
     request: Optional[int] = None    # 依頼数(処方上限まで)
     shortage: int = 0                # 処方上限を超えて足りない本数
-    max_days: Optional[int] = None   # 推奨使用期限日数
+    max_days: Optional[int] = None   # 廃棄期限日数
     as_needed: bool = False          # 随時使用
     warnings: list[str] = field(default_factory=list)  # 警告
     info: list[str] = field(default_factory=list)      # 情報

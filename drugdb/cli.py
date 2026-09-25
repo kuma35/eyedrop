@@ -28,7 +28,7 @@ from pathlib import Path
 
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
 from .import_ods import import_ods
-from .report import make_report, opened_text, to_enex, to_text
+from .report import estimate_text, make_report, opened_text, to_markdown
 from .rollover import rollover
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / 'eyedrop.db'
@@ -226,14 +226,12 @@ class DrugDbShell(Cmd):
             self.print(f"  名前: {row['start_date']}〜 {row['alias_name']}")
         for row in self.db.notes(drug_id):
             self.print(f"  メモ: {row['note_date'] or ''} {row['text']}")
-        est = self.db.estimate(drug_id)
-        days = '-' if est.days is None else f'{est.days:.1f}'
-        self.print(f'  推定使用日数: {days}日 ({est.basis} {est.samples})')
         for row in self.db.summaries(drug_id):
             self.print(f"  過去年値 {row['year']}: 平均{row['avg_days']:.1f}"
                        f"日 ({row['count']}本 {row['min_days']}"
                        f"〜{row['max_days']}日)")
         req = self.db.requirement(drug_id, span=0)
+        self.print(f'  {estimate_text(req)}')
         self.print(f'  未開封在庫: {req.stock}本 / {opened_text(req)}')
 
     # ------------------------------------------------------------ stock
@@ -321,18 +319,18 @@ class DrugDbShell(Cmd):
                            'help': '余裕日数'}),
              ('--today', {'type': parse_date, 'default': None,
                           'help': '基準日(省略時今日)'}),
-             ('--enex', {'default': None, 'metavar': 'FILE',
-                         'help': 'Evernote用 ENEX ファイルに出力'}))
+             ('-o', '--output', {'default': None, 'metavar': 'FILE',
+                                 'help': 'Markdown ファイルにも出力'}))
     def do_report(self, args):
         """受診前サマリー(次回受診までの必要本数)"""
         report = make_report(self.db, today=args.today, span=args.span,
                              next_visit=args.until,
                              margin_days=args.margin)
-        self.stdout.write(to_text(report))
-        if args.enex:
-            Path(args.enex).write_text(to_enex(report), encoding='utf-8')
-            self.print(f'\nENEX を出力しました: {args.enex}'
-                       ' (Evernote の「読み込む」で取り込めます)')
+        text = to_markdown(report)
+        self.stdout.write(text)
+        if args.output:
+            Path(args.output).write_text(text, encoding='utf-8')
+            print(f'出力しました: {args.output}', file=sys.stderr)
 
     # ------------------------------------------------------------ maintenance
     @command(('year', {'type': int, 'nargs': '?', 'default': None,

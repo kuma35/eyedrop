@@ -34,8 +34,7 @@
 - DB は既定でプロジェクト直下の `eyedrop.db`(`-f` または環境変数 `EYEDROP_DB` で変更)。日付は ISO 文字列で保持
 - 既存 DB は空だったのでスキーマを再設計: drug / drug_alias / stock / lifetime / lifetime_summary / drug_note / meta。
   旧 `drug_master` 等のテーブルは空のまま残っている(無害)
-- Evernote 出力は ENEX ファイル(Evernote の「読み込む」で取り込み)とテキスト。
-  ENEX の読み込みはデスクトップ版の機能のようなので、Linux からは Windows 機(muratti)経由かテキストの貼り付けになる可能性あり(未確認)
+- ~~Evernote 出力は ENEX ファイルとテキスト~~ → ユーザーの指示で Markdown に統一(下記)
 
 #### 仕様の具体化
 
@@ -59,6 +58,13 @@
 - `eyedrop-stock.ods`(`~/Documents` の本番のコピー)を参考にし、データもここから取る
   → 本番 DB `eyedrop.db` に取り込み済み(9品目、2026-09-24 分まで)
 - 両 ods は git 管理から外す。公開用のデータは精査して後日作成。開発はこのデータでテストするが公開しない
+- Evernote は Evernote Web で、MCP 連携かコピペで入れるので、テキスト版を含めて出力は Markdown 形式
+  → ENEX 出力を削除し `report` の出力を Markdown に統一(`report -o FILE` でファイルにも出力)。
+  依頼がある行は太字、詳細は表、推定の根拠は日本語表記
+- サマリーの先頭にユーザーの Evernote ノートと同じ形式の「目薬在庫」の表を置く
+  (目薬名 / 未開封個数 / 開封分開封日 / 日数)。お願い・詳細・根拠はその後に残す。
+  日数は直近の使い切り日数で、直近1本が途中廃棄・イレギュラーなら空欄(遡らない)。
+  随時使用(ヒアレイン)は表に含めない
   → `.gitignore` に `*.ods`。テストは直下の `eyedrop-stock.ods` を使い、無ければスキップ。
   履歴からの削除は「公開前に必ずやること」に記載
 
@@ -74,7 +80,7 @@
 - [ ] コソプトは 9/25 開封がシートにあるが在庫欄に出庫が無い(DB の在庫は3本のまま)。
   今日開けた分なら `drugdb/cmd_drugdb.sh out コソプト 1 -d 9/25`
 - [ ] Kivy GUI(`main.py`)をコアに接続(画面起動は未確認。import のみ確認済み)
-- [ ] Evernote への ENEX 取り込みを実際に確認
+- [ ] Evernote Web への Markdown 貼り付け / MCP 連携でのノート作成を実際に確認
 - [ ] pylint の残り(クラスのメソッド数・引数の数、テストメソッドの docstring)は設計上許容として保留
 
 #### 主なコミット

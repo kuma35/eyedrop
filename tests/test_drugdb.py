@@ -10,20 +10,19 @@ drugdb のテスト。プロジェクト直下で
 """
 import csv
 import io
-import re
 import sqlite3
 import tempfile
 import unittest
-import xml.dom.minidom
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
 from drugdb.cli import DrugDbShell, main
 from drugdb.drugdb import DrugDb, DrugDbError
-from drugdb.estimate import estimate_days, regular_days, requirement
+from drugdb.estimate import (estimate_days, last_days, regular_days,
+                             requirement)
 from drugdb.import_ods import Cell, import_ods, import_sheet
-from drugdb.report import make_report, to_enex, to_text
+from drugdb.report import make_report, to_markdown
 from drugdb.rollover import rollover
 
 # 開発用データ(本番のコピー)。非公開なので git 管理外。無ければスキップ
@@ -61,6 +60,16 @@ class TestEstimate(unittest.TestCase):
         self.assertEqual(estimate_days([], summaries).days, 32)
         self.assertEqual(estimate_days([], default_days=20).days, 20)
         self.assertIsNone(estimate_days([]).days)
+
+    def test_last_days(self):
+        rows = [life('2024-01-01', '2024-01-31'),
+                life('2024-01-31', '2024-03-01'),
+                life('2024-03-01', None)]
+        self.assertEqual(last_days(rows), 30)
+        # 直近がイレギュラーなら空欄(None)。遡らない
+        rows[1]['irregular'] = 1
+        self.assertIsNone(last_days(rows))
+        self.assertIsNone(last_days([life('2024-03-01', None)]))
 
     def test_requirement(self):
         est = estimate_days([life('2024-01-01', '2024-01-31')])  # 30日
@@ -232,10 +241,14 @@ class TestReport(DbTestCase):
         self.assertEqual([line.name for line in report.lines], ['A', 'B'])
         req = report.lines[0].req
         self.assertEqual((req.stock, req.need, req.request), (1, 2, 1))
-        text = to_text(report)
-        self.assertIn('A(A-generic): 必要2本・在庫1本なので 1本 ください',
+        text = to_markdown(report)
+        self.assertTrue(text.startswith('# 目薬 受診前サマリー 2024-06-11\n'))
+        # 依頼がある行は太字
+        self.assertIn('- **A(A-generic): 必要2本・在庫1本なので 1本 ください**',
                       text)
-        self.assertIn('B: 在庫2本(使用実績なし。必要数は相談)', text)
+        self.assertIn('- B: 在庫2本(使用実績なし。必要数は相談)', text)
+        self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 残り約20日 | 30'
+                      ' | 2 | 1 |', text)
 
     def test_report_as_needed_and_info(self):
         make_sample(self.db)
@@ -243,13 +256,18 @@ class TestReport(DbTestCase):
         self.db.receive('ヒアレイン', 2, '2024-01-01')
         self.db.update_drug('A', max_days=28)
         report = make_report(self.db, today='2024-07-05', span=60)
-        text = to_text(report)
-        self.assertIn('ヒアレイン: 随時使用・在庫2本', text)
-        self.assertIn('[info] 開封から34日経過。推奨使用期限の28日を過ぎて',
+        text = to_markdown(report)
+        self.assertIn('- ヒアレイン: 随時使用・在庫2本', text)
+        # 目薬在庫の表: 随時使用は含めない
+        table = text.split('## 目薬在庫')[1].split('## お願い')[0]
+        self.assertIn('| A | 1 | 6/1 | 31 |', table)
+        self.assertIn('| B | 2 |  |  |', table)
+        self.assertNotIn('ヒアレイン', table)
+        self.assertIn('| ヒアレイン | 2 | 開封中なし | -(参考) | - | - |',
                       text)
+        self.assertIn('- [info] A(A-generic): 開封から34日経過。'
+                      '推奨使用期限の28日を過ぎて', text)
         self.assertNotIn('[警告]', text)
-        enex = to_enex(report)
-        self.assertIn('[info] A(A-generic):', enex)
 
     def test_report_until(self):
         make_sample(self.db)
@@ -257,16 +275,10 @@ class TestReport(DbTestCase):
                              next_visit='2024-07-11')
         self.assertEqual(report.span, 30)
 
-    def test_enex_well_formed(self):
-        make_sample(self.db)
-        self.db.add_drug('<&>')
-        report = make_report(self.db, today='2024-06-11')
-        enex = to_enex(report, now=datetime(2024, 6, 11, tzinfo=timezone.utc))
-        xml.dom.minidom.parseString(enex)
-        content = re.search(r'<!\[CDATA\[(.*)\]\]>', enex, re.S).group(1)
-        dom = xml.dom.minidom.parseString(content)
-        self.assertEqual(dom.documentElement.tagName, 'en-note')
-        self.assertIn('<created>20240611T000000Z</created>', enex)
+    def test_markdown_table_escape(self):
+        self.db.add_drug('A|B')
+        text = to_markdown(make_report(self.db, today='2024-06-11'))
+        self.assertIn('| A\\|B | 0 |', text)
 
 
 class TestRollover(DbTestCase):

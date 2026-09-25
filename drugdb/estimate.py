@@ -86,6 +86,19 @@ def regular_days(lifetimes: Iterable, short_ratio: float =
     return [d for _, d in regular_rows(lifetimes, short_ratio)]
 
 
+def last_days(lifetimes: Sequence) -> Optional[int]:
+    """days of the most recently finished lifetime
+
+    JP:
+    直近の使い切り日数。 lifetimes は開封日の古い順。
+    終了済みのうち一番新しいものがイレギュラー(途中廃棄等)なら None。
+    """
+    finished = [row for row in lifetimes if row['use_end'] is not None]
+    if not finished or finished[-1]['irregular']:
+        return None
+    return days_between(finished[-1]['use_start'], finished[-1]['use_end'])
+
+
 def summarize(days: Sequence[int]) -> Optional[dict]:
     """summary of days (count, avg, min, max)
 

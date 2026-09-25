@@ -3,24 +3,27 @@
 
 JP:
 眼科受診直前に提出するサマリーを作ります。
-テキスト(端末表示・コピー用)と、 Evernote に取り込める ENEX 形式を
-出力できます。
-
-ENEX は Evernote の「ファイル > 読み込む」(Import)で取り込めます。
+出力は Markdown 形式です。端末表示、 Evernote Web へのコピペ、
+MCP 連携でのノート作成のいずれにもそのまま使えます。
 """
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from html import escape
+from datetime import date, timedelta
 from typing import Optional
 
 from .drugdb import DrugDb
-from .estimate import Requirement, to_date
+from .estimate import Requirement, last_days, to_date
 
 WARNING_TEXT = {
     'stock negative': '在庫数がマイナスです。棚卸ししてください',
 }
 
 LEVEL_LABEL = {'warning': '[警告]', 'info': '[info]'}
+
+BASIS_TEXT = {
+    'past years': '過去年値',
+    'default': '想定使用日数(default_days)',
+    'no data': '実績なし',
+}
 
 
 @dataclass
@@ -34,6 +37,7 @@ class ReportLine:
     name: str
     current_name: str
     req: Requirement
+    last_days: Optional[int] = None  # 直近の使い切り日数
 
 
 @dataclass
@@ -75,8 +79,9 @@ def make_report(db: DrugDb, today=None, span: Optional[int] = None,
     for drug in db.list_drugs(active_only=True):
         req = db.requirement(drug['drug_id'], span=span, today=today,
                              margin_days=margin_days, **kwargs)
-        lines.append(ReportLine(drug['drug_id'], drug['name'],
-                                db.current_name(drug['drug_id']), req))
+        lines.append(ReportLine(
+            drug['drug_id'], drug['name'], db.current_name(drug['drug_id']),
+            req, last_days(db.lifetimes(drug['drug_id']))))
     return Report(today, next_visit, span, margin_days, lines)
 
 
@@ -151,95 +156,79 @@ def estimate_text(req: Requirement) -> str:
     JP:
     1本あたりの推定日数。随時使用なら参考値である旨を付ける。
     """
-    basis = req.estimate.basis + ('・随時使用のため参考値' if req.as_needed
-                                  else '')
+    est = req.estimate
+    if est.basis.startswith('recent'):
+        basis = f'直近{len(est.samples)}本の平均 {est.samples}'
+    else:
+        basis = BASIS_TEXT.get(est.basis, est.basis)
+    if req.as_needed:
+        basis += '・随時使用のため参考値'
     return f'1本あたり推定 {_fmt_days(req.estimate.days)}日 ({basis})'
 
 
-def to_text(report: Report) -> str:
-    """plain text summary
+def _md_cell(value) -> str:
+    """escape text for markdown table cell"""
+    return str(value).replace('|', '\\|').replace('\n', ' ')
+
+
+def stock_table(report: Report) -> list[str]:
+    """'目薬在庫' table lines (markdown)
 
     JP:
-    テキスト形式のサマリー。
+    「目薬在庫」の表。随時使用の薬は含めない。
     """
-    out = [report.title,
-           f'次回受診予定: {report.next_visit.isoformat()}'
-           f' ({report.span}日後'
-           + (f' + 余裕{report.margin_days}日' if report.margin_days else '')
-           + ')',
-           '',
-           '■ お願い']
-    out += [f'・{request_sentence(line)}' for line in report.lines]
-    out += ['', '■ 詳細']
+    out = ['## 目薬在庫', '',
+           '| 目薬名 | 未開封個数 | 開封分開封日 | 日数 |',
+           '|---|---:|---|---:|']
     for line in report.lines:
         req = line.req
-        out.append(f'・{_display_name(line)}')
-        out.append(f'    未開封在庫 {req.stock}本 / {opened_text(req)}')
-        out.append(f'    {estimate_text(req)}')
-        out += [f'    {LEVEL_LABEL[level]} {text}'
-                for level, text in notices(line)]
-    return '\n'.join(out) + '\n'
+        if req.as_needed:
+            continue
+        opened = f'{req.opened.month}/{req.opened.day}' if req.opened else ''
+        days = '' if line.last_days is None else line.last_days
+        out.append(f'| {_md_cell(line.name)} | {req.stock} | {opened}'
+                   f' | {days} |')
+    out += ['',
+            '- 未開封個数…現時点で未開封の個数',
+            '- 開封分開封日…現在使用しているのを開封した日',
+            '- 日数…直近の使い切り日数(途中廃棄やイレギュラーの場合は空欄)']
+    return out
 
 
-def to_enml(report: Report) -> str:
-    """ENML (Evernote note content)
+def to_markdown(report: Report) -> str:
+    """markdown summary
 
     JP:
-    Evernote のノート本文(ENML)。
+    Markdown 形式のサマリー。
+    依頼がある行(「◯本 ください」)は太字にする。
     """
-    def cell(text, tag='td'):
-        return (f'<{tag} style="border:1px solid #888;padding:4px">'
-                f'{escape(str(text))}</{tag}>')
-
-    head = ''.join(cell(h, 'th') for h in (
-        '薬', '未開封在庫', '開封中', '推定日数/本', '必要本数', '依頼数'))
-    rows = []
+    span = f'{report.span}日後'
+    if report.margin_days:
+        span += f' + 余裕{report.margin_days}日'
+    out = [f'# {report.title}', '',
+           f'次回受診予定: **{report.next_visit.isoformat()}** ({span})', '']
+    out += stock_table(report)
+    out += ['', '## お願い', '']
+    for line in report.lines:
+        sentence = request_sentence(line)
+        out.append(f'- **{sentence}**' if line.req.request else
+                   f'- {sentence}')
+    out += ['', '## 詳細', '',
+            '| 薬 | 未開封在庫 | 開封中 | 推定日数/本 | 必要本数 | 依頼数 |',
+            '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
         req = line.req
-        rows.append('<tr>' + ''.join(cell(v) for v in (
-            _display_name(line), req.stock, opened_text(req),
-            _fmt_days(req.estimate.days) + ('(参考)' if req.as_needed
-                                            else ''),
+        days = _fmt_days(req.estimate.days) + ('(参考)' if req.as_needed
+                                               else '')
+        out.append('| ' + ' | '.join(_md_cell(v) for v in (
+            _display_name(line), req.stock, opened_text(req), days,
             '-' if req.need is None else req.need,
-            '-' if req.request is None else req.request)) + '</tr>')
-    sentences = ''.join(f'<li>{escape(request_sentence(line))}</li>'
-                        for line in report.lines)
-    warns = ''.join(
-        f'<li>{LEVEL_LABEL[level]} {escape(_display_name(line))}:'
-        f' {escape(text)}</li>'
-        for line in report.lines for level, text in notices(line))
-    body = (
-        f'<div>次回受診予定: {report.next_visit.isoformat()}'
-        f' ({report.span}日後)</div>'
-        f'<h3>お願い</h3><ul>{sentences}</ul>'
-        f'<h3>詳細</h3>'
-        f'<table style="border-collapse:collapse">'
-        f'<tr>{head}</tr>{"".join(rows)}</table>'
-        + (f'<h3>注意</h3><ul>{warns}</ul>' if warns else ''))
-    return ('<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
-            '<!DOCTYPE en-note SYSTEM '
-            '"http://xml.evernote.com/pub/enml2.dtd">'
-            f'<en-note>{body}</en-note>')
-
-
-def to_enex(report: Report, tags: tuple[str, ...] = ('eyedrop',),
-            now: Optional[datetime] = None) -> str:
-    """ENEX (Evernote export format) containing one note
-
-    JP:
-    ノート1つを含む ENEX(Evernote のインポート形式)。
-    """
-    now = now or datetime.now(timezone.utc)
-    stamp = now.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    tag_xml = ''.join(f'<tag>{escape(t)}</tag>' for t in tags)
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<!DOCTYPE en-export SYSTEM '
-        '"http://xml.evernote.com/pub/evernote-export4.dtd">\n'
-        f'<en-export export-date="{stamp}" application="eyedrop"'
-        ' version="1.0">\n'
-        f'<note><title>{escape(report.title)}</title>'
-        f'<content><![CDATA[{to_enml(report)}]]></content>'
-        f'<created>{stamp}</created><updated>{stamp}</updated>'
-        f'{tag_xml}</note>\n'
-        '</en-export>\n')
+            '-' if req.request is None else req.request)) + ' |')
+    notes = [f'- {LEVEL_LABEL[level]} {_display_name(line)}: {text}'
+             for line in report.lines for level, text in notices(line)]
+    if notes:
+        out += ['', '## 注意', ''] + notes
+    out += ['', '## 推定の根拠', '']
+    out += [f'- {_display_name(line)}: {estimate_text(line.req)}'
+            for line in report.lines]
+    return '\n'.join(out) + '\n'

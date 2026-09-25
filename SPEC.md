@@ -22,6 +22,9 @@
   - 実行後 `git log --all -- '*.ods'` で何も出ないことを確認
 - [ ] 公開用のサンプルデータを作る(ods を精査し、個人情報を除いたもの)
 - [ ] テスト(tests/test_drugdb.py の TestImportOds)を公開用データで通るようにする
+- [x] ライセンスを決める → MIT(`LICENSE`)
+- [ ] リポジトリの URL を決め、QIITA.md のインストール手順に記入
+- [ ] QIITA.md の `private: true` を公開時に `false` へ
 
 ## 開発記録
 

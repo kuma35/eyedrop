@@ -271,6 +271,10 @@ $ PATH=$PWD/venv/bin:$PATH ./check.sh drugdb    # pycodestyle / flake8 / pylint
 
 `requirements.txt` には、開発中の GUI 版(Kivy)とドキュメント(Sphinx)用のパッケージも入っています。
 
+# ライセンス
+
+MIT License です。
+
 # 今後
 
 - Kivy による GUI 版(目が悪くても見やすい、ハイコントラスト・大きな文字)

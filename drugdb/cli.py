@@ -28,7 +28,8 @@ from pathlib import Path
 
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
 from .import_ods import import_ods
-from .report import estimate_text, make_report, opened_text, to_markdown
+from .report import (estimate_text, make_report, opened_text, to_markdown,
+                     to_plain_text)
 from .rollover import rollover
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / 'eyedrop.db'
@@ -319,14 +320,17 @@ class DrugDbShell(Cmd):
                            'help': '余裕日数'}),
              ('--today', {'type': parse_date, 'default': None,
                           'help': '基準日(省略時今日)'}),
+             ('--plain', {'action': 'store_true',
+                          'help': 'Markdown ではなくテキスト版で出力'
+                                  '(Evernote アプリなど書式なしで貼る先向け)'}),
              ('-o', '--output', {'default': None, 'metavar': 'FILE',
-                                 'help': 'Markdown ファイルにも出力'}))
+                                 'help': 'ファイルにも出力'}))
     def do_report(self, args):
         """受診前サマリー(次回受診までの必要本数)"""
         report = make_report(self.db, today=args.today, span=args.span,
                              next_visit=args.until,
                              margin_days=args.margin)
-        text = to_markdown(report)
+        text = to_plain_text(report) if args.plain else to_markdown(report)
         self.stdout.write(text)
         if args.output:
             Path(args.output).write_text(text, encoding='utf-8')

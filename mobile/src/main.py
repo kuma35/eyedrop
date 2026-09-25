@@ -27,7 +27,7 @@ from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.report import (NAME_HEAD, SPAN_PATTERNS, line_name, make_report,
-                           notices, opened_text,
+                           notices, opened_text, to_plain_text,
                            pattern_cell, remaining_text, to_markdown)
 from drugdb.rollover import rollover
 
@@ -35,7 +35,9 @@ APP_TITLE = '目薬管理'
 DB_NAME = 'eyedrop.db'
 
 # 来院時必要本数の表の列名(スマホの幅に収まるよう短く)
-SHORT_SPAN_LABELS = {14: '2週間', 28: '1ヶ月(4週間)', 60: '2ヶ月'}
+# 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)
+SHORT_SPAN_LABELS = {14: '2週間', 28: '1ヶ月\n(4週間)', 60: '2ヶ月'}
+UNOPENED_HEAD = '未\n開封'
 
 # 文字サイズの倍率(画面上部の A－ / A＋ で切り替え)
 # 既定(DEFAULT_SCALE)より小さくもできる。倍率表示をタップすると既定に戻る
@@ -229,11 +231,24 @@ class EyedropApp:
                 checked=mode == value, height=56,
                 on_click=lambda e: self.set_name_mode(value))
 
-        # ハンバーガーメニュー: 目薬名の表示を画面内一斉に切り替える
+        def action_item(label: str, icon, handler) -> ft.PopupMenuItem:
+            return ft.PopupMenuItem(
+                content=ft.Text(label, size=TOPBAR_SIZE - 2), icon=icon,
+                height=72, on_click=handler)
+
+        # ハンバーガーメニュー: 目薬名の表示を画面内一斉に切り替える。
+        # サマリーのコピー(受診時はアプリを見せればよいのでボタンは画面に出さない。
+        # Evernote Web は Markdown を認識、 Android アプリはテキストのまま)
         menu = ft.PopupMenuButton(
             icon=ft.Icons.MENU, icon_size=32, tooltip='メニュー',
             items=[menu_item('代表名で表示(例: コソプト)', 'representative'),
-                   menu_item('実際の名前で表示(例: ドルモロール)', 'actual')])
+                   menu_item('実際の名前で表示(例: ドルモロール)', 'actual'),
+                   ft.PopupMenuItem(),  # 区切り線
+                   # アイコン付きの項目は折り返されないので2行に分ける
+                   action_item('Markdown をコピー\n(Web用)',
+                               ft.Icons.CONTENT_COPY, self.on_copy_summary),
+                   action_item('テキストをコピー\n(アプリ用)', ft.Icons.NOTES,
+                               self.on_copy_text)])
         return ft.AppBar(
             toolbar_height=64, leading=menu, leading_width=56,
             title=ft.Text(APP_TITLE, size=TOPBAR_SIZE,
@@ -272,6 +287,7 @@ class EyedropApp:
             supported_locales=[ft.Locale('ja', 'JP')],
             current_locale=ft.Locale('ja', 'JP'))
         self.share = ft.Share()
+        self.clipboard = ft.Clipboard()
         self.picker = ft.FilePicker()
         page.navigation_bar = ft.NavigationBar(
             selected_index=0, on_change=self.on_tab,
@@ -362,6 +378,8 @@ class EyedropApp:
         """
         if not rows:
             rows = [[''] * len(heads)]
+        # 見出しが2段(\n を含む)なら見出し行を高くする
+        head_lines = max(h.count('\n') + 1 for h in heads)
         line = ft.BorderSide(width=TABLE_LINE_WIDTH, color=ft.Colors.OUTLINE)
         data_table = ft.DataTable(
             column_spacing=12, horizontal_margin=8,
@@ -370,7 +388,7 @@ class EyedropApp:
             horizontal_lines=line, vertical_lines=line,
             heading_row_color=ft.Colors.with_opacity(0.2,
                                                      ft.Colors.PRIMARY),
-            heading_row_height=self.size(2.4),
+            heading_row_height=self.size(max(2.4, 1.2 * head_lines + 1.0)),
             data_row_min_height=self.size(2.4),
             data_row_max_height=self.size(2.8),
             heading_text_style=ft.TextStyle(size=self.size(0.9),
@@ -404,7 +422,6 @@ class EyedropApp:
             stock_rows.append([
                 line_name(line, mode), req.stock,
                 md(req.opened) if req.opened else '',
-                '' if req.elapsed is None else req.elapsed,
                 remaining_text(req),
                 '' if line.last_days is None else line.last_days])
         notes = [self.text(f'{line_name(line, mode)}: {text}', 0.9,
@@ -413,19 +430,17 @@ class EyedropApp:
                  for line in report.lines for level, text in notices(line)]
         controls = [
             self.text(f'{report.today.isoformat()} 時点', 0.9),
-            self.button('共有(Markdown)', self.on_share_summary,
-                        icon=ft.Icons.SHARE),
             self.heading('来院時必要本数'),
-            self.table([NAME_HEAD[mode], '未開封']
+            self.table([NAME_HEAD[mode], UNOPENED_HEAD]
                        + [SHORT_SPAN_LABELS.get(days, label)
                           for label, days in SPAN_PATTERNS],
                        pattern_rows, numeric=(1,)),
             self.text('必要N…処方をお願いする本数(予備1本込み・最大3本)。'
                       '空欄は処方不要', 0.8),
             self.heading('目薬在庫'),
-            self.table([NAME_HEAD[mode], '未開封', '開封日', '経過', '推定残',
-                        '日数'],
-                       stock_rows, numeric=(1, 3, 5)),
+            self.table([NAME_HEAD[mode], UNOPENED_HEAD, '開封日', '残\n日数',
+                        '通常\n日数'],
+                       stock_rows, numeric=(1, 3, 4)),
         ]
         if notes:
             controls += [self.heading('注意')] + notes
@@ -435,10 +450,28 @@ class EyedropApp:
                                       '「データ」タブで復元してください。'))
         return controls
 
-    async def on_share_summary(self, _e):
-        """share summary markdown via share sheet"""
-        text = to_markdown(self.report())
-        await self.share.share_text(text, subject='目薬 受診前サマリー')
+    async def on_copy_summary(self, _e):
+        """copy summary markdown to clipboard
+
+        JP:
+        サマリーを Markdown でクリップボードにコピーする。
+        Evernote へは手動で貼り付ける(共有メニューではうまくいかなかったため)。
+        """
+        await self.clipboard.set(to_markdown(self.report()))
+        self.notify('Markdown をコピーしました。Evernote Web に'
+                    '貼り付けてください')
+
+    async def on_copy_text(self, _e):
+        """copy summary plain text to clipboard
+
+        JP:
+        サマリーをテキスト版でクリップボードにコピーする。 Evernote の
+        Android アプリは貼り付けるとテキストのままになるので、記号の少ない
+        読みやすい形にしたもの。
+        """
+        await self.clipboard.set(to_plain_text(self.report()))
+        self.notify('テキストをコピーしました。Evernote アプリに'
+                    '貼り付けてください')
 
     # ------------------------------------------------------------ 目薬
     def build_drugs(self) -> list[ft.Control]:

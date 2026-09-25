@@ -300,6 +300,59 @@ def stock_table(report: Report) -> list[str]:
     return out
 
 
+# テキスト版の期間の表示名
+PLAIN_SPAN_LABELS = {60: '2ヶ月', 28: '1ヶ月', 14: '2週間'}
+
+
+def to_plain_text(report: Report) -> str:
+    """plain text summary (for apps that paste as plain text)
+
+    JP:
+    テキスト版のサマリー。 Evernote の Android アプリのように、貼り付けると
+    書式なしのテキストになるところでも読みやすいよう、記号の少ない1行1薬の形。
+    処方不要は「不要」。
+    """
+    mode = report.name_mode
+    labels = [PLAIN_SPAN_LABELS.get(days, label)
+              for label, days in SPAN_PATTERNS]
+    out = [report.title,
+           f'次回受診予定: {report.next_visit.isoformat()}'
+           f' ({report.span}日後)',
+           '',
+           f"■ 来院時必要本数({' / '.join(labels)})"]
+    for line in report.lines:
+        head = f'{line_name(line, mode)}  未開封{line.req.stock}'
+        if line.req.as_needed:
+            out.append(f'{head}  随時使用')
+            continue
+        cells = [f'{label}:{pattern_cell(req) or "不要"}'
+                 for label, req in zip(labels, line.patterns)]
+        out.append('  '.join([head] + cells))
+    out += [f'(必要N…処方をお願いする本数。予備{SPARE_BOTTLES}本込み・'
+            f'1回の処方は最大{MAX_PRESCRIPTION}本)',
+            '',
+            '■ 目薬在庫']
+    for line in report.lines:
+        req = line.req
+        if req.as_needed:
+            continue
+        parts = [line_name(line, mode), f'未開封{req.stock}']
+        if req.opened:
+            parts.append(f'開封日{req.opened.month}/{req.opened.day}')
+        if remaining_text(req):
+            parts.append(f'残日数{remaining_text(req)}')
+        if line.last_days is not None:
+            parts.append(f'通常日数{line.last_days}')
+        out.append('  '.join(parts))
+    out += ['', '■ お願い']
+    out += [f'・{request_sentence(line, mode)}' for line in report.lines]
+    notes = [f'・{LEVEL_LABEL[level]} {line_name(line, mode)}: {text}'
+             for line in report.lines for level, text in notices(line)]
+    if notes:
+        out += ['', '■ 注意'] + notes
+    return '\n'.join(out) + '\n'
+
+
 def to_markdown(report: Report) -> str:
     """markdown summary
 

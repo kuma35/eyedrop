@@ -136,10 +136,27 @@ class TestMobileScreens(unittest.TestCase):
                     os.environ[k] = v
 
     def test_summary(self):
-        text = self.texts(self.app.build_summary())
+        controls = self.app.build_summary()
+        text = self.texts(controls)
         self.assertIn('来院時必要本数', text)
         self.assertIn('目薬在庫', text)
         self.assertIn('随時', text)
+        # コピーはハンバーガーメニューへ移したので画面には無い
+        self.assertNotIn('をコピー', text)
+        menu = self.texts(self.app.build_topbar().leading.items)
+        self.assertIn('Markdown をコピー\n(Web用)', menu)
+        self.assertIn('テキストをコピー\n(アプリ用)', menu)
+        # 目薬在庫: 経過なし、残日数・通常日数。値の短い列は見出し2段
+        tables = [c.controls[0].content for c in controls
+                  if isinstance(c, ft.Row) and c.controls
+                  and isinstance(getattr(c.controls[0], 'content', None),
+                                 ft.DataTable)]
+        heads = [[col.label.value for col in t.columns] for t in tables]
+        self.assertEqual(heads[0][1:], ['未\n開封', '2ヶ月', '1ヶ月\n(4週間)',
+                                        '2週間'])
+        self.assertEqual(heads[1][1:], ['未\n開封', '開封日', '残\n日数',
+                                        '通常\n日数'])
+        self.assertGreater(tables[1].heading_row_height, self.app.size(2.4))
 
     def test_drugs(self):
         text = self.texts(self.app.build_drugs())
@@ -172,7 +189,7 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('代表名: A', detail)
         self.assertIn('実際の名前: A-generic (2026-02-01〜)', detail)
         menu = self.app.build_topbar().leading
-        self.assertEqual([i.checked for i in menu.items], [False, True])
+        self.assertEqual([i.checked for i in menu.items[:2]], [False, True])
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']

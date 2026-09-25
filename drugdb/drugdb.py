@@ -135,11 +135,15 @@ class DrugDb():
         JP:
         薬を登録し drug_id を返す。
         """
-        with self.conn:
-            cur = self.conn.execute(E.NEW_DRUG, {
-                'name': name, 'start_date': iso(start_date),
-                'max_days': max_days, 'default_days': default_days,
-                'note': note, 'as_needed': int(as_needed)})
+        try:
+            with self.conn:
+                cur = self.conn.execute(E.NEW_DRUG, {
+                    'name': name, 'start_date': iso(start_date),
+                    'max_days': max_days, 'default_days': default_days,
+                    'note': note, 'as_needed': int(as_needed)})
+        except sqlite3.IntegrityError as err:
+            raise DrugDbError(f'同じ代表名の目薬が既にあります: {name}') \
+                from err
         return cur.lastrowid
 
     def find_drug(self, key) -> sqlite3.Row:
@@ -179,14 +183,18 @@ class DrugDb():
         薬の列を更新する。例: update_drug('キサラタン', max_days=28)
         """
         drug_id = self.find_drug(key)['drug_id']
-        with self.conn:
-            for column, value in values.items():
-                if column not in DRUG_COLUMNS:
-                    raise DrugDbError(f'更新できない項目です: {column}')
-                if column.endswith('_date') and value is not None:
-                    value = iso(value)
-                self.conn.execute(E.UPDATE_DRUG.format(column=column),
-                                  {'value': value, 'drug_id': drug_id})
+        try:
+            with self.conn:
+                for column, value in values.items():
+                    if column not in DRUG_COLUMNS:
+                        raise DrugDbError(f'更新できない項目です: {column}')
+                    if column.endswith('_date') and value is not None:
+                        value = iso(value)
+                    self.conn.execute(E.UPDATE_DRUG.format(column=column),
+                                      {'value': value, 'drug_id': drug_id})
+        except sqlite3.IntegrityError as err:
+            raise DrugDbError(f'同じ代表名の目薬が既にあります: '
+                              f"{values.get('name')}") from err
 
     def add_alias(self, key, alias_name: str, start_date=None,
                   note: Optional[str] = None) -> int:

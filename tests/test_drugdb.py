@@ -22,7 +22,7 @@ from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.estimate import (estimate_days, last_days, regular_days,
                              requirement)
 from drugdb.import_ods import Cell, import_ods, import_sheet
-from drugdb.report import make_report, to_markdown
+from drugdb.report import make_report, to_markdown, to_plain_text
 from drugdb.rollover import rollover
 
 # 開発用データ(本番のコピー)。非公開なので git 管理外。無ければスキップ
@@ -175,6 +175,14 @@ class TestDrugDb(DbTestCase):
         self.assertEqual(self.db.balance('A', as_of='2023-02-28'), 2)
         self.assertEqual(self.db.balance('A'), 4)
 
+    def test_duplicate_drug_name(self):
+        self.db.add_drug('コソプト')
+        with self.assertRaises(DrugDbError):
+            self.db.add_drug('コソプト')
+        self.db.add_drug('キサラタン')
+        with self.assertRaises(DrugDbError):
+            self.db.update_drug('キサラタン', name='コソプト')
+
     def test_invalid_stock(self):
         self.db.add_drug('A')
         with self.assertRaises(DrugDbError):
@@ -299,6 +307,21 @@ class TestReport(DbTestCase):
         self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
         self.assertLess(text.index('## 来院時必要本数'),
                         text.index('## 目薬在庫'))
+
+    def test_plain_text(self):
+        make_sample(self.db)
+        self.db.add_drug('D', as_needed=True)
+        self.db.receive('D', 2, '2024-01-01')
+        text = to_plain_text(make_report(self.db, today='2024-06-11',
+                                         name_mode='representative'))
+        self.assertIn('■ 来院時必要本数(2ヶ月 / 1ヶ月 / 2週間)', text)
+        # 10日経過・残20日・30日/本・在庫1
+        self.assertIn('A  未開封1  2ヶ月:必要2  1ヶ月:必要1  2週間:不要', text)
+        self.assertIn('D  未開封2  随時使用', text)
+        self.assertIn('A  未開封1  開封日6/1  残日数20  通常日数31', text)
+        self.assertIn('・A: 必要3本・在庫1本なので 2本 ください', text)
+        self.assertNotIn('|', text)
+        self.assertNotIn('#', text)
 
     def test_report_name_mode(self):
         make_sample(self.db)
@@ -425,6 +448,9 @@ class TestCli(DbTestCase):
         self.assertIn('2024-01-01 〜 2024-01-31  30日', out)
         out = self.run_cmd('report --today 2024-02-10 -s 60')[0]
         self.assertIn('A: 必要3本・在庫1本なので 2本 ください', out)
+        out = self.run_cmd('report --today 2024-02-10 --plain')[0]
+        self.assertIn('■ 来院時必要本数', out)
+        self.assertNotIn('| ', out)
 
     def test_errors(self):
         _, err, failed = self.run_cmd('in 無い薬 1')

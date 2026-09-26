@@ -269,7 +269,7 @@ $ venv/bin/python -m unittest discover -s tests
 $ PATH=$PWD/venv/bin:$PATH ./check.sh drugdb    # pycodestyle / flake8 / pylint
 ```
 
-`requirements.txt` には、開発中の GUI 版(Kivy)とドキュメント(Sphinx)用のパッケージも入っています。
+`requirements.txt` には、スマホ版(Flet)とドキュメント(Sphinx)用のパッケージも入っています。
 
 # ライセンス
 
@@ -277,7 +277,7 @@ MIT License です。
 
 # 今後
 
-- Kivy による GUI 版(目が悪くても見やすい、ハイコントラスト・大きな文字)
+- Flet による Android 版(目が悪くても見やすい、大きな文字)
 - Evernote への自動投稿
 
 # おわりに

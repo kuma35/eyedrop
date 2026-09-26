@@ -9,7 +9,7 @@ JP:
 行います。コマンドライン版は ``python3 -m drugdb`` で起動します
 (cli.py 参照)。
 
-Kivy には依存しません。 GUI からも同じクラスを使います。
+GUI には依存しません。スマホ版(mobile/)からも同じクラスを使います。
 """
 import logging
 import sqlite3

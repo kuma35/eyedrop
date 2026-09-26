@@ -18,10 +18,12 @@
   - `eyedrop-stock.ods` と `build/toybox/eyedrop-stock.ods` は本番の医療記録のコピー
     (医療機関名・医師名・手術の経緯を含む)。現在は git 管理外(`.gitignore` の `*.ods`)だが、
     過去のコミット(6c61a47, 09f3919, d4ac702)に残っている
-  - 例: `git filter-repo --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods`
+  - 例: `git filter-repo --dry-run --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods` dry run して確実に当該ファイルだけが削除される事を確認してから実際に実行 `git filter-repo --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods`
   - 実行後 `git log --all -- '*.ods'` で何も出ないことを確認
+  - [ ] 削除後、当該コミットのコミットメッセージと矛盾がないように、必要あればコミットメッセージを修正  
 - [ ] 公開用のサンプルデータを作る(ods を精査し、個人情報を除いたもの)
-- [ ] テスト(tests/test_drugdb.py の TestImportOds)を公開用データで通るようにする
+  - [ ] あなた(claude)が削除対象としたものを列挙。列挙だけでまだ削除はしない。 個人情報、医療機関名・医師名・手術の経緯を含む。 薬の代表名、薬の名前は削除しない
+  - [ ] 列挙されたのを元に私が指定したのを削除したデータを作成
 - [x] ライセンスを決める → MIT(`LICENSE`)
 - [ ] リポジトリの URL を決め、QIITA.md のインストール手順に記入
 - [ ] QIITA.md の `private: true` を公開時に `false` へ
@@ -423,7 +425,9 @@ cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/bu
 - [ ] シートのグラナテック 2026-12-22 → 2025-12-22 を修正
 - [ ] コソプトは 9/25 開封がシートにあるが在庫欄に出庫が無い(DB の在庫は3本のまま)。
   今日開けた分なら `drugdb/cmd_drugdb.sh out コソプト 1 -d 9/25`
-- [ ] Kivy GUI(`main.py`)をコアに接続(画面起動は未確認。import のみ確認済み)
+- [x] ~~Kivy GUI(`main.py`)をコアに接続~~ → 取りやめ。GUI は Flet のスマホ版(`mobile/`)に置き換えたので、
+  Kivy 関連(`main.py`・`eyedrop.kv`・`eyedrop.ini`・`choicefont.py`・`kivy_garden/`・`locale/`・`build/` の gettext 一式)を
+  削除した(2026-09-26。履歴には残っている)。`build/toybox/eyedrop-stock.ods`(git 管理外)はそのまま
 - [ ] Evernote Web への Markdown 貼り付け / MCP 連携でのノート作成を実際に確認
 - [ ] pylint の残り(クラスのメソッド数・引数の数、テストメソッドの docstring)は設計上許容として保留
 

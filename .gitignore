@@ -10,8 +10,6 @@ __pycache__/
 # Environments
 venv/
 
-build/extract
-
 /eyedrop.db
 
 # 本番データのコピー(開発・テスト用。非公開)

@@ -1,6 +1,3 @@
-# 実行時(GUI)
-kivy
-kivy_garden
 # スマホ版(mobile/)。flet-cli は APK ビルド、flet-web は Web 表示での確認用
 flet==1.0.1
 flet-cli==1.0.1

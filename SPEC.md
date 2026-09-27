@@ -15,7 +15,13 @@
 ## 公開前に必ずやること
 
 - [ ] **git 履歴から本番データ(ods)を消す**
-  - [ ] git filter-repo のインストール。 git は `~/bin/` 、 man は `~/share/man` git-filter-repo の clone が必要ならば `~/work/git-filter-repo` に展開する
+  - [x] git filter-repo のインストール。 git は `~/bin/` 、 man は `~/share/man` git-filter-repo の clone が必要ならば `~/work/git-filter-repo` に展開する
+    → `~/work/git-filter-repo` に本体を clone(`git clone --depth 1 https://github.com/newren/git-filter-repo.git`)。
+    本体は1ファイルのスクリプトなので `git-filter-repo` を `~/bin/` にコピー(実行権限あり)。
+    man ページはリポジトリに同梱されておらず `docs` ブランチにビルド済みのものがあるため、
+    `git fetch origin docs --depth 1` してから `git show FETCH_HEAD:man1/git-filter-repo.1` で取り出し、
+    `~/share/man/man1/git-filter-repo.1` に設置。`~/bin`・`~/share/man` は元々 `$PATH`・`$MANPATH` に
+    入っているので追加設定は不要。`git filter-repo --version`(`31ebad4c8fb3`)・`man git-filter-repo` で確認済み
   - `eyedrop-stock.ods` と `build/toybox/eyedrop-stock.ods` は本番の医療記録のコピー
     (医療機関名・医師名・手術の経緯を含む)。現在は git 管理外(`.gitignore` の `*.ods`)だが、
     過去のコミット(6c61a47, 09f3919, d4ac702)に残っている

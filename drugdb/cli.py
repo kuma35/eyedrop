@@ -10,9 +10,12 @@ JP:
    python3 -m drugdb                 # 対話シェル
    python3 -m drugdb report -s 60    # コマンドを1つ実行して終了
    python3 -m drugdb -f other.db drugs
+   python3 -m drugdb -f other.db --create add コソプト  # 新規データベースを作る
 
 データベースは -f で指定。省略時は環境変数 EYEDROP_DB、
 それも無ければプロジェクト直下の eyedrop.db 。
+-f や EYEDROP_DB で指定したファイルが無いとエラーになる(新規作成は --create)。
+何も指定しなかったとき(既定のファイル)は無ければ新規作成する。
 
 日付は YYYY-MM-DD 、 YYYY/MM/DD または MM/DD(今年)で指定できます。
 省略すると今日です。
@@ -80,9 +83,14 @@ def command(*arguments):
         def wrapper(self, line):
             try:
                 args = parser.parse_args(shlex.split(line))
-                if args.help:
-                    parser.print_help(self.stdout)
-                    return False
+            except DrugDbError as err:
+                self.error(err)
+                parser.print_help(self.stdout)
+                return False
+            if args.help:
+                parser.print_help(self.stdout)
+                return False
+            try:
                 return func(self, args)
             except (DrugDbError, ValueError) as err:
                 self.error(err)
@@ -90,6 +98,25 @@ def command(*arguments):
         wrapper.parser = parser
         return wrapper
     return decorator
+
+
+def _flags_summary(parser: argparse.ArgumentParser) -> str:
+    """short usage of a command's optional flags (excluding -h)
+
+    JP:
+    コマンド一覧に添える「[-a]」のようなオプション一覧(-h は除く)。
+    """
+    parts = []
+    for action in parser._actions:  # pylint: disable=protected-access
+        if not action.option_strings or action.option_strings[0] in (
+                '-h', '--help'):
+            continue
+        flag = action.option_strings[0]
+        if action.nargs == 0:
+            parts.append(f'[{flag}]')
+        else:
+            parts.append(f'[{flag} {action.metavar or action.dest.upper()}]')
+    return ' '.join(parts)
 
 
 DRUG = ('drug', {'help': '薬(ID、代表目薬名または目薬名)'})
@@ -137,10 +164,17 @@ class DrugDbShell(Cmd):
         if arg:
             super().do_help(arg)
             return
+        self.print('各サブコマンドの詳しいヘルプは -h(例: drugs -h、または help drugs)')
         for name in sorted(n[3:] for n in self.get_names()
                            if n.startswith('do_')):
-            doc = (getattr(self, f'do_{name}').__doc__ or '').strip()
-            self.print(f'  {name:10} {doc.splitlines()[0] if doc else ""}')
+            func = getattr(self, f'do_{name}')
+            doc = (func.__doc__ or '').strip()
+            line = f'  {name:10} {doc.splitlines()[0] if doc else ""}'
+            if hasattr(func, 'parser'):
+                flags = _flags_summary(func.parser)
+                if flags:
+                    line += f'  {flags}'
+            self.print(line)
 
     def do_q(self, _arg):
         """終了"""
@@ -399,17 +433,31 @@ def main(argv=None) -> int:
 
     JP:
     エントリポイント。コマンドが無ければ対話シェル。
+    -f(または環境変数 EYEDROP_DB)で指定したファイルが無ければエラーにする
+    (誤ったパスを指定すると気づかずに空の新規データベースを見てしまうため)。
+    新しく作りたいときは --create を付ける。どちらも指定しなければ既定の
+    ファイル(プロジェクト直下の eyedrop.db)を使い、無ければ新規作成する。
     """
     parser = argparse.ArgumentParser(
         prog='drugdb', description='目薬の在庫・ライフタイム管理')
-    parser.add_argument('-f', '--file', dest='filename',
-                        default=os.environ.get('EYEDROP_DB', str(DEFAULT_DB)),
+    parser.add_argument('-f', '--file', dest='filename', default=None,
                         metavar='FILENAME',
-                        help='データベースファイル')
+                        help='データベースファイル(省略時は環境変数 EYEDROP_DB'
+                             'か既定のファイル)。指定した場合、無ければエラー'
+                             '(新規作成は --create)')
+    parser.add_argument('--create', action='store_true',
+                        help='指定したファイルが無ければ新しく作成する')
     parser.add_argument('command', nargs=argparse.REMAINDER,
                         help='実行するコマンド(省略時は対話シェル)')
     args = parser.parse_args(argv)
-    with DrugDb(args.filename) as db:
+    filename = args.filename or os.environ.get('EYEDROP_DB')
+    explicit = filename is not None
+    if not explicit:
+        filename = str(DEFAULT_DB)
+    if explicit and not args.create and not Path(filename).exists():
+        parser.error(f'データベースファイルが見つかりません: {filename}'
+                     '(新しく作る場合は --create)')
+    with DrugDb(filename) as db:
         shell = DrugDbShell(db)
         if args.command:
             shell.onecmd(shlex.join(args.command))

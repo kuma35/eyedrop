@@ -16,7 +16,9 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
+from drugdb import cli
 from drugdb.cli import DrugDbShell, main
 from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.estimate import (estimate_days, last_days, regular_days,
@@ -684,6 +686,25 @@ class TestCli(DbTestCase):
             shell.onecmd(line)
         return out.getvalue(), err.getvalue(), shell.failed
 
+    def test_help_lists_flags(self):
+        out = self.run_cmd('help')[0]
+        self.assertIn('各サブコマンドの詳しいヘルプは -h', out)
+        self.assertIn('drugs      薬の一覧  [-a]', out)
+        detail = self.run_cmd('help drugs')[0]
+        self.assertIn('-a, --all', detail)
+
+    def test_parse_error_shows_subcommand_help(self):
+        out, err, failed = self.run_cmd('drugs help')
+        self.assertTrue(failed)
+        self.assertIn('unrecognized arguments', err)
+        self.assertIn('usage: drugs', out)
+        self.assertIn('-a, --all', out)
+        # 実行時のエラー(構文は正しい)ではヘルプを付けない
+        out, err, failed = self.run_cmd('in 無い薬 1')
+        self.assertTrue(failed)
+        self.assertIn('薬が見つかりません', err)
+        self.assertNotIn('usage:', out)
+
     def test_commands(self):
         self.assertFalse(self.run_cmd('add A -d 2024-01-01')[2])
         self.run_cmd('in A 3 -d 2024-01-01')
@@ -728,8 +749,23 @@ class TestCli(DbTestCase):
     def test_main_one_shot(self):
         db_file = str(self.path / 'main.db')
         with redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
-            self.assertEqual(main(['-f', db_file, 'add', 'X']), 0)
+            self.assertEqual(main(['-f', db_file, '--create', 'add', 'X']), 0)
             self.assertEqual(main(['-f', db_file, 'in', 'Y', '1']), 1)
+
+    def test_main_missing_file_errors(self):
+        db_file = str(self.path / 'missing.db')
+        with redirect_stderr(io.StringIO()) as err:
+            with self.assertRaises(SystemExit):
+                main(['-f', db_file, 'drugs'])
+        self.assertIn('見つかりません', err.getvalue())
+        self.assertFalse(Path(db_file).exists())
+
+    def test_main_default_file_auto_creates(self):
+        db_file = str(self.path / 'auto.db')
+        with mock.patch.object(cli, 'DEFAULT_DB', Path(db_file)), \
+                redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+            self.assertEqual(main(['add', 'X']), 0)
+        self.assertTrue(Path(db_file).exists())
 
 
 class TestImportSheet(DbTestCase):

@@ -15,6 +15,7 @@
 ## 公開前に必ずやること
 
 - [ ] **git 履歴から本番データ(ods)を消す**
+  - [ ] git filter-repo のインストール。 git は `~/bin/` 、 man は `~/share/man` git-filter-repo の clone が必要ならば `~/work/git-filter-repo` に展開する
   - `eyedrop-stock.ods` と `build/toybox/eyedrop-stock.ods` は本番の医療記録のコピー
     (医療機関名・医師名・手術の経緯を含む)。現在は git 管理外(`.gitignore` の `*.ods`)だが、
     過去のコミット(6c61a47, 09f3919, d4ac702)に残っている
@@ -97,6 +98,23 @@ Kivy にはこだわらない。開発前にツールと配布方法(野良 APK 
   (スマホ版はこの既定値をそのまま使うだけになったが `REMAINING_LABEL` の明示指定はそのまま)。
   テスト(`tests/test_drugdb.py` の該当箇所も「推定残り」に更新)を含め
   `unittest discover -s tests`(50件)は全て成功
+- [x] report の 次回受診予定 は不要。「お願い」と「詳細」不要
+  → `to_markdown`/`to_plain_text` から「次回受診予定: …」の行、「## お願い」/「■ お願い」
+  (先生に伝える文 `request_sentence`。使う所が無くなったので削除)、「## 詳細」
+  (未開封在庫・開封中・推定日数/本・必要本数・依頼数の表)を削除。
+  スマホ版のサマリー画面はもともとこの3つを表示していない(来院時必要本数・目薬在庫の表のみ)ので、
+  これで CLI/PC の `report`・`report --plain` もアプリと同じ内容になった。
+  「## 注意」「## 推定の根拠」(1本あたり推定日数の根拠)はそのまま残した。
+  `report --ai`(`ai_export.py`)の JSON の「次回受診予定」キーは今回は変更していない。
+  テスト(`tests/test_drugdb.py` の該当箇所を更新)を含め `unittest discover -s tests`(70件)は全て成功
+- [x] 「来院時必要本数」→「次回来院までに必要な本数」(CLI・アプリ両方)
+  → `drugdb/report.py`(表の見出し・関数のコメント)、`drugdb/ai_export.py`(Evernote AI 用プロンプト)、
+  `mobile/src/main.py`(サマリー画面・設定画面の見出し、コメント)、`QIITA.md` の用語・出力例をすべて置き換え。
+  あわせて QIITA.md の出力例に残っていた「次回受診予定」の行と「お願い」の節(前項で CLI から削除済みだったのに
+  例が古いままだった)も削除して実際の出力に合わせた。DB のデータ・スキーマは変わらないので、
+  スマホは新しい APK を入れ直すだけでよく、データの移行・変換は不要。
+  テスト(`tests/test_drugdb.py`・`tests/test_mobile.py` の文言を更新)を含め
+  `unittest discover -s tests`(70件)は全て成功
 
 ## android-TODO
 

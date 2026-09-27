@@ -188,7 +188,7 @@ class TestMobileScreens(unittest.TestCase):
     def test_summary(self):
         controls = self.app.build_summary()
         text = self.texts(controls)
-        self.assertIn('来院時必要本数', text)
+        self.assertIn('次回来院までに必要な本数', text)
         self.assertIn('目薬在庫', text)
         self.assertIn('随時', text)
         # コピーはハンバーガーメニューへ移したので画面には無い

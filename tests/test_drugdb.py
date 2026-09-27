@@ -419,14 +419,12 @@ class TestReport(DbTestCase):
         self.assertEqual((req.stock, req.need, req.request), (1, 3, 2))
         text = to_markdown(report)
         self.assertTrue(text.startswith('# 目薬 受診前サマリー 2024-06-11\n'))
-        # 依頼がある行は太字
-        self.assertIn('- **A(A-generic): 必要3本・在庫1本なので 2本 ください**',
-                      text)
-        self.assertIn('- B: 在庫2本(使用実績なし。必要数は相談)', text)
-        self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 推定残り約20日 | 30'
-                      ' | 3 | 2 |', text)
+        # 次回受診予定・お願い・詳細は無し
+        self.assertNotIn('次回受診予定', text)
+        self.assertNotIn('## お願い', text)
+        self.assertNotIn('## 詳細', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
-        # 来院時必要本数: 2ヶ月/1ヶ月(4週間)/2週間。10日経過・残20日・30日/本
+        # 次回来院までに必要な本数: 2ヶ月/1ヶ月(4週間)/2週間。10日経過・残20日・30日/本
         self.assertEqual([r.need for r in report.lines[0].patterns],
                          [3, 2, 1])
         # 処方不要は空欄、必要なら「必要N」(N は依頼数)
@@ -435,7 +433,7 @@ class TestReport(DbTestCase):
                       ' | 1ヶ月(4週間) | 2週間 |', text)
         self.assertIn('| 代表目薬名 | 未開封個数 |', text)
         self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
-        self.assertLess(text.index('## 来院時必要本数'),
+        self.assertLess(text.index('## 次回来院までに必要な本数'),
                         text.index('## 目薬在庫'))
 
     def test_plain_text(self):
@@ -444,12 +442,13 @@ class TestReport(DbTestCase):
         self.db.receive('D', 2, '2024-01-01')
         text = to_plain_text(make_report(self.db, today='2024-06-11',
                                          name_mode='representative'))
-        self.assertIn('■ 来院時必要本数(2ヶ月 / 1ヶ月 / 2週間)', text)
+        self.assertIn('■ 次回来院までに必要な本数(2ヶ月 / 1ヶ月 / 2週間)', text)
         # 10日経過・残20日・30日/本・在庫1
         self.assertIn('A  未開封1  2ヶ月:必要2  1ヶ月:必要1  2週間:不要', text)
         self.assertIn('D  未開封2  随時使用', text)
         self.assertIn('A  未開封1  開封日6/1  残日数20  通常日数31', text)
-        self.assertIn('・A: 必要3本・在庫1本なので 2本 ください', text)
+        self.assertNotIn('次回受診予定', text)
+        self.assertNotIn('■ お願い', text)
         self.assertNotIn('|', text)
         self.assertNotIn('#', text)
 
@@ -516,7 +515,7 @@ class TestReport(DbTestCase):
         self.assertEqual(len(report.lines[0].patterns), 3)
         text = to_markdown(report)
         self.assertIn('| 3ヶ月(通常) | 45日 | 3週間 |', text)
-        self.assertIn('■ 来院時必要本数(3ヶ月 / 45日 / 3週間)',
+        self.assertIn('■ 次回来院までに必要な本数(3ヶ月 / 45日 / 3週間)',
                       to_plain_text(report))
         from drugdb.ai_export import to_ai_data, to_ai_prompt
         self.assertIn('3ヶ月(通常) / 45日 / 3週間', to_ai_prompt(report))
@@ -534,7 +533,7 @@ class TestReport(DbTestCase):
         act = to_markdown(make_report(self.db, today='2024-06-11',
                                       name_mode='actual'))
         self.assertIn('| 目薬名 | 未開封 |', act)
-        self.assertIn('- **A-generic: 必要3本', act)
+        self.assertIn('- A-generic: 1本あたり推定', act)
         with self.assertRaises(ValueError):
             make_report(self.db, name_mode='bad')
 
@@ -545,16 +544,13 @@ class TestReport(DbTestCase):
         self.db.update_drug('A', max_days=28)
         report = make_report(self.db, today='2024-07-05', span=60)
         text = to_markdown(report)
-        self.assertIn('- ヒアレイン: 随時使用・在庫2本', text)
         # 目薬在庫の表: 随時使用は含めない
-        table = text.split('## 目薬在庫')[1].split('## お願い')[0]
+        table = text.split('## 目薬在庫')[1].split('## 推定の根拠')[0]
         # 7/5 時点 34日経過、推定30日 -> 超過4日
         self.assertIn('| A | 1 | 6/1 | 34 | 超過4日 | 31 |', table)
         self.assertIn('| B | 2 |  |  |  |  |', table)
         self.assertNotIn('ヒアレイン', table)
         self.assertIn('| ヒアレイン | 2 | 随時 | 随時 | 随時 |', text)
-        self.assertIn('| ヒアレイン | 2 | 開封中なし | -(参考) | - | - |',
-                      text)
         self.assertIn('- [info] A(A-generic): 開封から34日経過。'
                       '廃棄期限(4週間)を過ぎています', text)
         self.assertNotIn('[警告]', text)
@@ -572,7 +568,6 @@ class TestReport(DbTestCase):
         report = make_report(self.db, today='2024-06-11', span=60)
         text = to_markdown(report)
         self.assertIn('| A | 0 | 必要3(不足3) | 必要3 | 必要3 |', text)
-        self.assertIn('3本 ください(処方上限3本。3本不足)', text)
         self.assertIn('[警告] A: 処方上限3本では次回受診までに3本不足します',
                       text)
 
@@ -699,9 +694,12 @@ class TestCli(DbTestCase):
         out = self.run_cmd('life A')[0]
         self.assertIn('2024-01-01 〜 2024-01-31  30日', out)
         out = self.run_cmd('report --today 2024-02-10 -s 60')[0]
-        self.assertIn('A: 必要3本・在庫1本なので 2本 ください', out)
+        self.assertIn('## 次回来院までに必要な本数', out)
+        self.assertNotIn('次回受診予定', out)
+        self.assertNotIn('## お願い', out)
+        self.assertNotIn('## 詳細', out)
         out = self.run_cmd('report --today 2024-02-10 --plain')[0]
-        self.assertIn('■ 来院時必要本数', out)
+        self.assertIn('■ 次回来院までに必要な本数', out)
         self.assertNotIn('| ', out)
 
     def test_endname(self):

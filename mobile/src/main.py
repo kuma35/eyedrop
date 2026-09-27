@@ -10,9 +10,9 @@ drugdb パッケージを PC 版と共通で使います。
 
 画面は下部のタブで切り替えます。
 
-- サマリー: 来院時必要本数・目薬在庫の表。共有メニューで Markdown を送る
+- サマリー: 次回来院までに必要な本数・目薬在庫の表。共有メニューで Markdown を送る
 - 目薬: 開封・入庫・棚卸し。薬ごとの履歴と設定
-- 設定: バックアップ・復元・年次更新・来院時必要本数の期間・表示テーマ
+- 設定: バックアップ・復元・年次更新・次回来院までに必要な本数の期間・表示テーマ
 
 目が悪くても見やすいよう、既定は黒地に白の高コントラストで文字は大きめ。
 """
@@ -39,7 +39,7 @@ APP_TITLE = '目薬管理'
 DB_NAME = 'eyedrop.db'
 
 # 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)。
-# 来院時必要本数の期間の列名は span_label(days, 'short')
+# 次回来院までに必要な本数の期間の列名は span_label(days, 'short')
 UNOPENED_HEAD = '未\n開封'
 
 # コメント欄の最大文字数(一言メモ程度)
@@ -493,7 +493,7 @@ class EyedropApp:
         """summary tab
 
         JP:
-        サマリー: 来院時必要本数と目薬在庫の表、注意、共有ボタン。
+        サマリー: 次回来院までに必要な本数と目薬在庫の表、注意、共有ボタン。
         """
         report = self.report()
         mode = report.name_mode
@@ -516,7 +516,7 @@ class EyedropApp:
                  for line in report.lines for level, text in notices(line)]
         controls = [
             self.text(f'{report.today.isoformat()} 時点', 0.9),
-            self.heading('来院時必要本数'),
+            self.heading('次回来院までに必要な本数'),
             self.table([NAME_HEAD[mode], UNOPENED_HEAD]
                        + report.span_labels('short'),
                        pattern_rows, numeric=(1,)),
@@ -567,7 +567,7 @@ class EyedropApp:
         """copy prompt + JSON for Evernote AI
 
         JP:
-        Evernote AI 用に、指示(プロンプト)と来院時必要本数・目薬在庫の
+        Evernote AI 用に、指示(プロンプト)と次回来院までに必要な本数・目薬在庫の
         データ(JSON)をクリップボードにコピーする。
         """
         await self.clipboard.set(to_ai_prompt(self.report()))
@@ -1105,7 +1105,7 @@ class EyedropApp:
         """data tab
 
         JP:
-        設定: バックアップ・復元・年次更新・来院時必要本数の期間・表示テーマ。
+        設定: バックアップ・復元・年次更新・次回来院までに必要な本数の期間・表示テーマ。
         """
         theme = self.db.get_meta('theme_mode') or 'dark'
         return [
@@ -1125,7 +1125,7 @@ class EyedropApp:
             self.text('指定した年より前の記録を退避し、在庫を繰り越します。', 0.9),
             self.button('年次更新', lambda e: self.on_rollover(),
                         icon=ft.Icons.EVENT_REPEAT, filled=False),
-            self.heading('来院時必要本数の期間'),
+            self.heading('次回来院までに必要な本数の期間'),
             self.text('次の診察までの期間を月・週・日で指定します。', 0.9),
             *self.span_controls(),
             self.heading('表示'),
@@ -1143,7 +1143,7 @@ class EyedropApp:
         """span setting fields (number + unit)
 
         JP:
-        来院時必要本数の期間の設定欄。次回診察日は月単位・週単位で決まるので
+        次回来院までに必要な本数の期間の設定欄。次回診察日は月単位・週単位で決まるので
         「数 + 単位(ヶ月/週間/日)」で入れる(1ヶ月=30日、1週間=7日で換算)。
         通常の期間を変えると残り2つに半分・さらに半分(単位に合わせて丸める)を
         自動で入れる。

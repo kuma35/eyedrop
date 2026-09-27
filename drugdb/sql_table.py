@@ -11,7 +11,7 @@ JP:
 drug
 ----
 
-薬(登録名)を管理します。同じ効能なら drug_id はひとつだけです。
+薬(代表目薬名)を管理します。同じ効能なら drug_id はひとつだけです。
 ジェネリック等で実際に貰う薬の名前が変わった場合は drug_alias に
 名前を追加します(drug_id は変えない)。
 
@@ -25,7 +25,7 @@ drug
 drug_alias
 ----------
 
-実際に支給される薬の名前(ジェネリック等)。代表目薬名(drug.name)は固定。
+目薬名(実際に支給される薬の名前。ジェネリック等)。代表目薬名(drug.name)は固定。
 end_date(利用終了日)が空欄の名前は利用中です。切替時期は利用中の名前が
 2つになることもあります。目薬名がすべて利用終了した代表目薬名は利用終了扱い。
 名前が1件も無ければ drug.name をそのまま使います。
@@ -70,7 +70,7 @@ SCHEMA_VERSION = 5
 DRUG = """
 CREATE TABLE IF NOT EXISTS drug (
     drug_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,   -- 登録名 例:コソプト
+    name TEXT NOT NULL UNIQUE,   -- 代表目薬名 例:コソプト
     start_date TEXT,             -- 使用開始日
     end_date TEXT,               -- 使用終了日。NULLなら使用中
     max_days INTEGER,            -- 開封後の廃棄期限日数 例:28

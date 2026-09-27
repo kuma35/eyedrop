@@ -18,7 +18,7 @@ FIND_DRUG_BY_ID = """
 SELECT * FROM drug WHERE drug_id = :key;
 """
 
-# 登録名で見つからなければ別名(現在・過去の薬の名前)で探す
+# 代表目薬名で見つからなければ目薬名(現在・過去)で探す
 FIND_DRUG_BY_NAME = """
 SELECT * FROM drug WHERE name = :key
 UNION

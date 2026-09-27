@@ -92,7 +92,7 @@ def command(*arguments):
     return decorator
 
 
-DRUG = ('drug', {'help': '薬(ID、登録名または薬の名前)'})
+DRUG = ('drug', {'help': '薬(ID、代表目薬名または目薬名)'})
 QTY = ('qty', {'type': int, 'help': '本数'})
 DATE = ('-d', '--date', {'type': parse_date, 'default': None,
                          'help': '日付(省略時今日)'})
@@ -169,7 +169,7 @@ class DrugDbShell(Cmd):
                        f"  在庫{self.db.balance(drug['drug_id'])}"
                        + (f"  ({', '.join(extra)})" if extra else ''))
 
-    @command(('name', {'help': '登録名'}), DATE,
+    @command(('name', {'help': '代表目薬名'}), DATE,
              ('--max-days', {'type': int,
                              'help': '開封後の廃棄期限日数(超過で info)'}),
              ('--default-days', {'type': int,
@@ -197,12 +197,12 @@ class DrugDbShell(Cmd):
             value = parse_date(value)
         self.db.update_drug(args.drug, **{args.field: value})
 
-    @command(DRUG, ('name', {'help': '実際に支給される名前'}), DATE, MEMO)
+    @command(DRUG, ('name', {'help': '目薬名'}), DATE, MEMO)
     def do_alias(self, args):
-        """実際に支給される名前を追加(代表目薬名はそのまま。-d で開始日)"""
+        """目薬名を追加(代表目薬名はそのまま。-d で開始日)"""
         self.db.add_alias(args.drug, args.name, args.date, args.memo)
 
-    @command(DRUG, ('name', {'help': '実際に支給される名前'}),
+    @command(DRUG, ('name', {'help': '目薬名'}),
              ('-d', '--date', {'type': parse_date, 'default': None,
                                'help': '利用終了日(省略時今日)'}),
              ('--clear', {'action': 'store_true', 'help': '利用中に戻す'}))

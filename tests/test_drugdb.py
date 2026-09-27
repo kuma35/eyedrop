@@ -423,7 +423,7 @@ class TestReport(DbTestCase):
         self.assertIn('- **A(A-generic): 必要3本・在庫1本なので 2本 ください**',
                       text)
         self.assertIn('- B: 在庫2本(使用実績なし。必要数は相談)', text)
-        self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 残り約20日 | 30'
+        self.assertIn('| A(A-generic) | 1 | 6/1開封 10日経過 推定残り約20日 | 30'
                       ' | 3 | 2 |', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
         # 来院時必要本数: 2ヶ月/1ヶ月(4週間)/2週間。10日経過・残20日・30日/本
@@ -563,8 +563,8 @@ class TestReport(DbTestCase):
         from drugdb.report import opened_text
         make_sample(self.db)
         req = self.db.requirement('A', span=60, today='2024-06-11')
-        self.assertIn(' 残り約20日', opened_text(req))
-        self.assertIn(' 推定残り約20日', opened_text(req, '推定残り'))
+        self.assertIn(' 推定残り約20日', opened_text(req))
+        self.assertIn(' 残り約20日', opened_text(req, '残り'))
 
     def test_report_prescription_limit(self):
         self.db.add_drug('A')

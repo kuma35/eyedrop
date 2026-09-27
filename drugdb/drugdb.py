@@ -153,7 +153,7 @@ class DrugDb():
         """find drug by id, name or alias name
 
         JP:
-        drug_id、登録名、別名(現在・過去の薬の名前)のいずれかで薬を探す。
+        drug_id、代表目薬名、目薬名(現在・過去)のいずれかで薬を探す。
         """
         if isinstance(key, int) or str(key).isdigit():
             rows = self.conn.execute(

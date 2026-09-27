@@ -14,7 +14,7 @@
 
 ## 公開前に必ずやること
 
-- [ ] **git 履歴から本番データ(ods)を消す**
+- [x] **git 履歴から本番データ(ods)を消す**(2026-09-27 実行)
   - [x] git filter-repo のインストール。 git は `~/bin/` 、 man は `~/share/man` git-filter-repo の clone が必要ならば `~/work/git-filter-repo` に展開する
     → `~/work/git-filter-repo` に本体を clone(`git clone --depth 1 https://github.com/newren/git-filter-repo.git`)。
     本体は1ファイルのスクリプトなので `git-filter-repo` を `~/bin/` にコピー(実行権限あり)。
@@ -24,10 +24,24 @@
     入っているので追加設定は不要。`git filter-repo --version`(`31ebad4c8fb3`)・`man git-filter-repo` で確認済み
   - `eyedrop-stock.ods` と `build/toybox/eyedrop-stock.ods` は本番の医療記録のコピー
     (医療機関名・医師名・手術の経緯を含む)。現在は git 管理外(`.gitignore` の `*.ods`)だが、
-    過去のコミット(6c61a47, 09f3919, d4ac702)に残っている
-  - 例: `git filter-repo --dry-run --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods` dry run して確実に当該ファイルだけが削除される事を確認してから実際に実行 `git filter-repo --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods`
-  - 実行後 `git log --all -- '*.ods'` で何も出ないことを確認
-  - [ ] 削除後、当該コミットのコミットメッセージと矛盾がないように、必要あればコミットメッセージを修正  
+    過去のコミット(6c61a47, 09f3919, d4ac702)に残っていた
+  - dry run はまず `/tmp` の使い捨て clone(`git clone --no-local`。ローカル clone は `--no-local` を
+    付けないと git-filter-repo に「fresh clone に見えない」と拒否される)で実施し、
+    `git filter-repo --dry-run --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods`
+    の前後の fast-export を比較して ods 関連の行だけが減ることを確認。同じ使い捨て clone で dry-run 無しの
+    本実行も試し、`git log --all -- '*.ods'` が空になること・コミット数が 47→44
+    (中身が空になった3コミットが自動 prune)になることを確認してから本物のリポジトリに反映した
+  - 本物のリポジトリでの実行前に `.git` を tar で `/tmp` にバックアップ。本物のリポジトリは
+    fresh clone ではない(履歴を書き換えてきた本人の作業コピー)ため `--force` が必要
+    (これも git-filter-repo の安全機構どおり)。実行コマンド:
+    `git filter-repo --force --invert-paths --path eyedrop-stock.ods --path build/toybox/eyedrop-stock.ods`
+  - 実行後 `git log --all -- '*.ods'` で何も出ないことを確認(45コミットに減少。リモートは元々無し)
+  - [x] 削除後、当該コミットのコミットメッセージと矛盾がないように、必要あればコミットメッセージを修正
+    → ods を追加・移動しただけの3コミット(6c61a47, 09f3919, d4ac702)は変更後に中身が空になり
+    git-filter-repo が自動で削除したので、そもそもメッセージが残らない。
+    「Stop tracking eyedrop-stock.ods files」(旧 36bce79、書き換え後 8bc8dd2)は
+    差分が `.gitignore` の追記だけになったが、メッセージ・本文とも「ods を git 管理から外す」という
+    趣旨のままで矛盾は無いので修正不要と判断した  
 - [ ] 公開用のサンプルデータを作る(ods を精査し、個人情報を除いたもの)
   - [ ] あなた(claude)が削除対象としたものを列挙。列挙だけでまだ削除はしない。 個人情報、医療機関名・医師名・手術の経緯を含む。 薬の代表名、薬の名前は削除しない
   - [ ] 列挙されたのを元に私が指定したのを削除したデータを作成

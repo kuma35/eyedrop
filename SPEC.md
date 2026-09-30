@@ -419,6 +419,17 @@
   - [x] 仕様確認「推定は直近3本の平均」について、
     - カレントが最初のレコードの場合、直近0本なので推定不可とし、医師の処方に任せる旨の表示を行う
 	- カレントが2つめ3つめのレコードの場合、直近1本、直近2本なのでそれで平均を取る
+	
+- [x] APKインストール・テスト時に毎回「自動回転 ON」になってしまうので、テスト後は元の状態に戻すなどして。
+  → 原因は Claude がアプリの起動に使っていた `adb shell monkey -p io.github.kuma35.eyedrop ...`
+  (monkey は画面回転を操作するテスト用の道具で、端末の回転の設定を書き換えることがある)。対策(2026-09-30):
+  - 起動は `adb shell am start -n io.github.kuma35.eyedrop/.MainActivity` にする(起動するだけで設定に触らない)
+  - 念のためテスト前に `adb shell settings get system accelerometer_rotation`(自動回転 1=ON / 0=OFF)と
+    `user_rotation` を記録し、テスト後に `adb shell settings put system accelerometer_rotation 値` で戻す
+  - Claude のメモリ(端末操作の注意)にも記録
+  - 実機で確認(2026-09-30、SH-54D): 自動回転 OFF(`accelerometer_rotation=0`)の状態から、
+    `am start` で起動しても 0 のまま、`monkey` で起動すると 1(ON)に変わった。確認後 0 に戻した
+
 ### android-tablet-TODO ###
 
 - [x] Androidタブレットへの対応
@@ -551,6 +562,7 @@ Markdown の「目薬在庫」の表は ods のノート形式のまま変えて
 venv/bin/pip install -r requirements.txt
 cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/build/apk/eyedrop.apk
 ~/Android/sdk/platform-tools/adb install -r build/apk/eyedrop.apk  # USB 接続したスマホへ
+~/Android/sdk/platform-tools/adb shell am start -n io.github.kuma35.eyedrop/.MainActivity  # 起動(monkey は使わない)
 ```
 
 - 初回のビルドは Flutter 3.44.8・JDK・Android SDK を自動で取り込む(Android SDK は `~/Android/sdk`)。

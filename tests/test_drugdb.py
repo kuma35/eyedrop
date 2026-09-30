@@ -523,33 +523,29 @@ class TestReport(DbTestCase):
                 db.close()
 
     def test_change_pattern(self):
-        """eye drop pattern change excludes earlier lifetimes
+        """eye drop pattern change marks only the latest lifetime
 
         JP:
-        点眼パターン変更: 変更日より前の開封分(開封中を含む)をイレギュラーにし、
-        メモに「点眼パターン変更」を追記。以後は変更後の実績だけで推定する。
+        点眼パターン変更: 変更日より前に開封した直近の1件(開封中)だけを
+        イレギュラーにし、メモに「点眼パターン変更」を追記。推定はそれより前を
+        辿らないので、以後は変更後の実績だけで推定する。
         """
         self.db.add_drug('X', '2024-01-01')
         self.db.receive('X', 6, '2024-01-01')
         for day in ('2024-01-01', '2024-01-31', '2024-03-01', '2024-03-31'):
             self.db.open_bottle('X', day)
         lives = self.db.lifetimes('X')
-        self.db.set_irregular(lives[1]['lifetime_id'], note='紛失')
-        self.db.set_irregular(lives[1]['lifetime_id'], False)
-        self.db.set_irregular(lives[0]['lifetime_id'], note='途中廃棄')
-        # 4/10 に1日2回→1回に変更(開封中の 3/31 の1本も対象)
+        self.db.set_irregular(lives[3]['lifetime_id'], False,
+                              note='予備を先に開封')
+        # 4/10 に1日2回→1回に変更(開封中の 3/31 の1本が対象)
         marked = self.db.change_pattern('X', '2024-04-10', '1日2回→1回')
-        self.assertEqual(marked, [r['lifetime_id'] for r in lives[1:]])
+        self.assertEqual(marked, lives[3]['lifetime_id'])
         lives = self.db.lifetimes('X')
-        self.assertTrue(all(r['irregular'] for r in lives))
-        # 既にイレギュラーだったものはメモもそのまま
-        self.assertEqual(lives[0]['note'], '途中廃棄')
-        self.assertEqual(lives[1]['note'],
-                         '紛失 / 点眼パターン変更(2024-04-10) 1日2回→1回')
-        self.assertEqual(lives[3]['note'],
+        self.assertEqual([r['irregular'] for r in lives], [0, 0, 0, 1])
+        self.assertEqual(lives[3]['note'], '予備を先に開封 / '
                          '点眼パターン変更(2024-04-10) 1日2回→1回')
         self.assertEqual(self.db.find_drug('X')['pattern_date'], '2024-04-10')
-        # 変更後の実績が無いので推定できず「相談」
+        # イレギュラーより前は辿らないので推定できず「相談」
         report = make_report(self.db, today='2024-04-11', span=60)
         self.assertEqual(need_cell(report.lines[0].req), '相談')
         # 変更後の1本を使い切ると、その1本だけで推定する
@@ -557,6 +553,33 @@ class TestReport(DbTestCase):
         self.db.open_bottle('X', '2024-06-09')
         est = self.db.estimate('X')
         self.assertEqual((est.days, est.samples), (60, [60]))
+        # 変更日より前の開封が無ければ何もしない(変更日だけ記録)
+        self.db.add_drug('Y')
+        self.assertIsNone(self.db.change_pattern('Y', '2024-04-10'))
+
+    def test_estimate_stops_at_irregular(self):
+        """estimate uses only lifetimes after the last irregular
+
+        JP:
+        イレギュラーが1つあれば、そこより前には辿らない(紛失などでも同じ)。
+        """
+        rows = [life('2024-01-01', '2024-01-31'),
+                life('2024-01-31', '2024-03-01'),
+                life('2024-03-01', '2024-03-20'),
+                life('2024-03-20', '2024-04-17'),
+                life('2024-04-17', '2024-05-17')]
+        # 19日は極端に短いので自動で除外(中央値29 * 0.7 未満)
+        self.assertEqual(estimate_days(rows).samples, [30, 28, 30])
+        rows[2]['irregular'] = 1               # 3/1〜3/20 が紛失など
+        est = estimate_days(rows)
+        self.assertEqual(est.samples, [28, 30])  # 前の30, 29 は使わない
+        # 最後がイレギュラー(開封中を含む)なら実績なし。過去年値も辿らない
+        rows.append(life('2024-05-17', None))
+        rows[-1]['irregular'] = 1
+        summary = [{'avg_days': 30, 'count': 3}]
+        self.assertEqual(estimate_days(rows, summary, default_days=25).basis,
+                         'default')
+        self.assertEqual(estimate_days(rows, summary).basis, 'no data')
 
     def test_change_pattern_ignores_older_summaries(self):
         self.db.add_drug('X', '2020-01-01')
@@ -580,8 +603,8 @@ class TestReport(DbTestCase):
                      'life X'):
             shell.onecmd(line)
         text = out.getvalue()
-        self.assertIn('点眼パターン変更: 2件をイレギュラーにしました'
-                      '(ライフタイム 1, 2)', text)
+        self.assertIn('点眼パターン変更: ライフタイム 2 をイレギュラーにしました',
+                      text)
         self.assertIn('点眼パターン変更 2024-02-10', text)
         self.assertIn('*2024-01-31', text)
         self.assertIn('点眼パターン変更(2024-02-10) 両眼に変更', text)

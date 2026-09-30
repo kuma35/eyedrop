@@ -10,8 +10,10 @@ DB に依存しない計算ロジック。
 直近の実績の方が平均より適切なことが多いので、
 イレギュラーでない終了済みライフタイムのうち直近 window 件の平均を使う。
 ただし極端に短い実績(中央値 * short_ratio 未満)は除外する。
-直近実績が無ければ年次更新で退避した過去年値(lifetime_summary)、
-それも無ければ drug.default_days を使う。
+イレギュラーが1つあれば、そこより前には辿らない(最後のイレギュラーより後の
+実績だけを使う。点眼パターン変更などで前の実績が当てにならないため)。
+直近実績が無ければ年次更新で退避した過去年値(lifetime_summary。
+イレギュラーがあるときは辿らない)、それも無ければ drug.default_days を使う。
 開封後の廃棄期限(max_days)は推定の上限にはしない(うっかり使い続ける
 こともあるので実績どおりに推定する)。超過は info として知らせるだけ。
 
@@ -146,8 +148,14 @@ def estimate_days(lifetimes: Iterable, summaries: Iterable = (),
     """estimate how many days one bottle lasts
 
     JP:
-    1本が何日もつかを推定する。
+    1本が何日もつかを推定する。 lifetimes は開封日の古い順。
+    最後のイレギュラー(開封中を含む)より前の実績と過去年値は使わない。
     """
+    lifetimes = list(lifetimes)
+    marks = [i for i, row in enumerate(lifetimes) if row['irregular']]
+    if marks:
+        lifetimes = lifetimes[marks[-1] + 1:]
+        summaries = ()
     days = regular_days(lifetimes, short_ratio)
     if days:
         recent = days[-window:]

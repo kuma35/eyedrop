@@ -377,11 +377,11 @@ class DrugDbShell(Cmd):
     @command(DRUG, ('-d', '--date', {'type': parse_date, 'default': None,
                                      'help': '変更日(省略時今日)'}), MEMO)
     def do_pattern(self, args):
-        """点眼パターン変更(変更日より前の開封分をイレギュラーにして推定から外す)"""
+        """点眼パターン変更(直近の開封をイレギュラーにし、それより前を推定に使わない)"""
         marked = self.db.change_pattern(args.drug, args.date, args.memo)
-        self.print(f'点眼パターン変更: {len(marked)}件をイレギュラーにしました'
-                   + (f"(ライフタイム {', '.join(map(str, marked))})"
-                      if marked else ''))
+        self.print('点眼パターン変更: ' + (
+            f'ライフタイム {marked} をイレギュラーにしました' if marked
+            else '変更日より前の開封はありません'))
 
     @command(('lifetime_id', {'type': int,
                               'help': 'ライフタイムID(life で表示)'}),

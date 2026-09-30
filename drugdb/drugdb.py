@@ -564,32 +564,34 @@ class DrugDb():
         if cur.rowcount == 0:
             raise DrugDbError(f'ライフタイムがありません: {lifetime_id}')
 
-    def change_pattern(self, key, change_date=None, memo=None) -> list[int]:
-        """eye drop pattern changed: exclude earlier lifetimes
+    def change_pattern(self, key, change_date=None,
+                       memo=None) -> Optional[int]:
+        """eye drop pattern changed: mark latest lifetime irregular
 
         JP:
         点眼パターン(1日の点眼回数など)の変更。 change_date(省略時今日)より前に
-        開封した分(開封中を含む)をイレギュラーにし、メモに「点眼パターン変更」
-        (memo があれば続けて)を追記する。既にイレギュラーのものはそのまま。
+        開封した直近の1件(通常は開封中の1本)をイレギュラーにし、メモに
+        「点眼パターン変更」(memo があれば続けて)を追記する。
+        推定はイレギュラーより前を辿らないので、それより前の実績は使われない。
         変更日を drug.pattern_date に記録し、それより前の年の過去年値も
-        推定に使わない。イレギュラーにした lifetime_id の一覧を返す。
+        推定に使わない(年次更新でイレギュラーの記録が退避された後のため)。
+        イレギュラーにした lifetime_id を返す(対象が無ければ None)。
         """
         drug_id = self.find_drug(key)['drug_id']
         day = iso(change_date)
         text = f'{PATTERN_NOTE}({day})' + (f' {memo}' if memo else '')
-        marked = []
+        rows = [row for row in self.lifetimes(drug_id)
+                if row['use_start'] < day]
         with self.conn:
-            for row in self.lifetimes(drug_id):
-                if row['use_start'] >= day or row['irregular']:
-                    continue
+            if rows:
+                row = rows[-1]
                 note = f"{row['note']} / {text}" if row['note'] else text
                 self.conn.execute(E.SET_IRREGULAR, {
                     'irregular': 1, 'note': note,
                     'lifetime_id': row['lifetime_id']})
-                marked.append(row['lifetime_id'])
             self.conn.execute(E.UPDATE_DRUG.format(column='pattern_date'),
                               {'value': day, 'drug_id': drug_id})
-        return marked
+        return rows[-1]['lifetime_id'] if rows else None
 
     def delete_lifetime(self, lifetime_id: int):
         """delete lifetime record (for correction)"""

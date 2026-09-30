@@ -573,7 +573,7 @@ class EyedropApp:
             f'来院日 {visit.isoformat()}', visit, self.set_visit_date)]
         if self.visit_date:
             visit_row.append(ft.TextButton(
-                content=self.text('今日に戻す', 0.9),
+                content=self.text('来院日を今日に戻す', 0.9),
                 on_click=lambda e: self.set_visit_date(None)))
         next_row = [self.summary_date_button(
             f'次回来院日 {next_visit.isoformat()}'
@@ -581,7 +581,7 @@ class EyedropApp:
             self.set_next_date)]
         if self.next_date:
             next_row.append(ft.TextButton(
-                content=self.text(f'既定({default}後)に戻す', 0.9),
+                content=self.text(f'次回来院日を既定({default}後)に戻す', 0.9),
                 on_click=lambda e: self.set_next_date(None)))
         return [ft.Row(wrap=True, spacing=8, run_spacing=8, controls=row)
                 for row in (visit_row, next_row)]
@@ -1001,7 +1001,8 @@ class EyedropApp:
                 f"点眼パターン変更 {drug['pattern_date']}", 0.9))
         controls += [
             self.heading('開封の履歴'),
-            self.text('タップでイレギュラー(推定に使わない)を切り替え', 0.8),
+            self.text('タップでイレギュラー(推定に使わない)を切り替え。'
+                      'イレギュラーより前の実績も推定に使いません', 0.8),
         ]
         today = date.today()
         rows = []
@@ -1044,8 +1045,9 @@ class EyedropApp:
         """eye drop pattern change dialog
 
         JP:
-        点眼パターン変更のダイアログ。変更日より前に開封した分(開封中を含む)を
-        イレギュラーにし、メモに「点眼パターン変更」とコメントを追記する。
+        点眼パターン変更のダイアログ。変更日より前に開封した直近の1本
+        (通常は使用中の1本)をイレギュラーにし、メモに「点眼パターン変更」と
+        コメントを追記する。推定はイレギュラーより前を辿らない。
         """
         chosen = {'date': date.today()}
         name = self.drug_label(drug_id)
@@ -1054,18 +1056,20 @@ class EyedropApp:
         def ok():
             marked = self.db.change_pattern(drug_id, chosen['date'],
                                             memo_value(memo))
-            return (f'{name}: 点眼パターン変更。'
-                    f'{len(marked)}件をイレギュラーにしました')
+            return f'{name}: 点眼パターン変更。' + (
+                '直近の開封をイレギュラーにしました' if marked
+                else '変更日より前の開封はありません')
 
         when = self.date_button(chosen['date'],
                                 lambda d: chosen.update(date=d),
                                 prefix='変更日')
         self.ask(f'{name} の点眼パターン変更', [
             self.text('1日の点眼回数や点眼する眼が変わったときに使います。'
-                      '変更日より前に開封した目薬(使用中の1本を含む)を'
+                      '変更日より前に開封した直近の1本(通常は使用中の1本)を'
                       'イレギュラー(推定に使わない)にし、開封の履歴のメモに'
-                      '「点眼パターン変更」と記録します。変更後の目薬を1本'
-                      '使い切るまで、必要本数は「相談」になります。', 0.9),
+                      '「点眼パターン変更」と記録します。イレギュラーより前の'
+                      '実績は推定に使わないので、変更後の目薬を1本使い切るまで、'
+                      '必要本数は「相談」になります。', 0.9),
             when, memo], '変更', ok)
 
     def history_row(self, label: str, note: Optional[str], color=None,

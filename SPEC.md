@@ -654,6 +654,12 @@ cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/bu
 - しばらく自分で運用してから、他の人向けにリリースする
 - リリース時はデータ無し(またはサンプルデータ)。APK には DB を含めていない(`exclude` で除外済み)ので、
   インストール直後は空
+- APK は git に入れず、GitHub の Releases に添付して配布する(2026-10-01 user の決定、Claude の提案)。
+  git は過去の版をすべて残すので、APK(約55MB)を更新するたびにリポジトリが大きくなり、後から消すには
+  `git filter-repo` で履歴を書き換える必要があるため。Releases の URL を QIITA.md の `<APK の配布先 URL>` に書く。
+  リポジトリには証明書のフィンガープリントだけを載せる(QIITA.md・SPEC.md)
+- 公開用の鍵で署名した APK は `mobile/build/apk/` にあるが、次にふつうにビルドすると開発用の鍵の APK で上書きされる。
+  Releases に添付するときは、その時点で公開用の鍵で署名し直してビルドする(`apksigner verify --print-certs` で指紋を確認)
 
 参考:
 - https://developer.android.com/developer-verification

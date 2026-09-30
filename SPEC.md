@@ -119,6 +119,40 @@
 - [ ] 署名の鍵: 当面は PC 開発用の鍵(`~/.android/debug.keystore`)のまま。この鍵ファイルはバックアップしておく。
   他の人向けに公開する前に、自分用の正式な鍵(keystore、パスワードが必要)に切り替える
   (切り替えると旧版から上書き更新できないので、自分のスマホもバックアップ → 入れ直し → 復元)
+  → 手順(2026-09-30 検討。鍵の作成はまだ):
+  1. 鍵を作る(user が自分で実行。パスワードは keytool がその場で聞くので会話には残らない。Claude Code では `!` 付きで実行)。
+     保存先はリポジトリの外。`keytool` は `/usr/bin/keytool`(Java 17)
+     ```sh
+     mkdir -p ~/keys && keytool -genkeypair -v -keystore ~/keys/eyedrop-release.jks -alias eyedrop -keyalg RSA -keysize 4096 -validity 10000
+     ```
+     - パスワードは keystore と鍵の2種類(同じでもよい)
+     - 名前・組織は APK の証明書に入り誰でも見られるので、本名ではなくハンドル名(kuma35 など)にする
+     - 有効期間 10000日(約27年)は Android で一般的な値
+  2. 署名して APK を作る(user が Claude Code の外の端末で実行。パスワードは `read -rs` で入力し、
+     画面・履歴・ファイル・会話に残さない。Claude Code の `!` で `export パスワード` すると会話の記録に平文で残る
+     (2026-09-30 実際に起きたのでそのパスワードは使わない)。また `!` は毎回別のシェルなので export は引き継がれない)
+     ```sh
+     cd mobile
+     read -rs FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD && export FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD
+     read -rs FLET_ANDROID_SIGNING_KEY_PASSWORD && export FLET_ANDROID_SIGNING_KEY_PASSWORD
+     ../venv/bin/flet build apk --yes --arch arm64-v8a \
+       --android-signing-key-store ~/keys/eyedrop-release.jks --android-signing-key-alias eyedrop
+     ```
+     確認は `~/Android/sdk/build-tools/<版>/apksigner verify --print-certs build/apk/eyedrop.apk`
+  3. スマホ・タブレットの入れ替え(鍵が変わると上書きできないので1回だけ): アプリで「ファイルに保存」→
+     `adb uninstall io.github.kuma35.eyedrop`(データも消える)→ `adb install` → 「ファイルから復元」
+  4. 鍵の管理:
+     - 鍵ファイルとパスワードはリポジトリの外の複数の場所にバックアップ(USB メモリ、パスワード管理ソフトなど)。
+       なくすと公開した APK を誰も上書き更新できなくなる(作り直すと別のアプリ扱い)
+     - リポジトリには入れない(`.gitignore` に `*.jks`・`*.keystore` を追加済み)
+     - 公開時は証明書の SHA-256 指紋を README に載せると、利用者が本物か確かめられる
+     - 2027年以降に日本でも Google の開発者確認制度が始まると、この鍵を登録する場面があるかもしれない
+  → 2026-10-01 公開用の鍵を作成(user。保存場所は SPEC.md には書かない)し、署名付きで APK をビルド(user の端末で)。
+     証明書 `CN=kuma35`、SHA-256 `974a8aa31677c6cf66ba03aea0478837cba8070583626dfd34358f3219234da0`
+     (開発用の鍵 `CN=Android Debug` とは別であることを確認)。
+     スマホ(SH-54D)を入れ替え: 本番データを「ファイルに保存」(`eyedrop-backup-20261001.db`、PC にもコピーして整合性確認)
+     → アンインストール → インストール → 「ファイルから復元」。サマリーは前日の表示から1日分進んだ値で一致。
+     自動回転は OFF のまま。タブレット(TECLAST M40)の入れ替えは未
 
 ## CLI版
 ### cli-TODO ###

@@ -85,6 +85,23 @@ $ adb install -r eyedrop.apk
 アプリを上書きで更新してもデータは消えませんが、機種変更などに備えて
 「設定」タブの「ファイルに保存」でときどきバックアップしてください。
 
+### 署名の確認(フィンガープリント)
+
+配布している APK は次の証明書で署名しています。
+ダウンロードした APK が本物かどうかは、証明書の SHA-256 フィンガープリントがこれと一致するかで確かめられます。
+
+- 証明書: `CN=kuma35`
+- SHA-256: `97:4A:8A:A3:16:77:C6:CF:66:BA:03:AE:A0:47:88:37:CB:A8:07:05:83:62:6D:FD:34:35:8F:32:19:23:4D:A0`
+
+確認には Android SDK Build-Tools の `apksigner` を使います(`keytool -printcert -jarfile` では読めません)。
+
+```sh
+$ apksigner verify --print-certs eyedrop.apk
+Signer #1 certificate DN: CN=kuma35
+Signer #1 certificate SHA-256 digest: 974a8aa31677c6cf66ba03aea0478837cba8070583626dfd34358f3219234da0
+...
+```
+
 ### ビルド・インストール
 
 Linux(Ubuntu 24.04 で確認)で APK を作る手順です。

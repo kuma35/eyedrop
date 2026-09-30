@@ -18,3 +18,7 @@ venv/
 
 # スマホ版(Flet)のビルド生成物
 mobile/build/
+
+# Android の署名の鍵(公開用の keystore)。絶対にコミットしない。保存先はリポジトリの外(~/keys/)
+*.jks
+*.keystore

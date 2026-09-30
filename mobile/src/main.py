@@ -355,7 +355,7 @@ class EyedropApp:
                                ft.Icons.CONTENT_COPY, self.on_copy_summary),
                    action_item('サマリーを\nテキストでコピー', ft.Icons.NOTES,
                                self.on_copy_text),
-                   action_item('サマリーを\nEvernote AI 用にコピー',
+                   action_item('サマリーを\nチャットAI用にコピー',
                                ft.Icons.AUTO_AWESOME,
                                self.on_copy_ai)])
         return ft.AppBar(
@@ -665,15 +665,15 @@ class EyedropApp:
                     '貼り付けてください')
 
     async def on_copy_ai(self, _e):
-        """copy prompt + JSON for Evernote AI
+        """copy prompt + JSON for chat AI
 
         JP:
-        Evernote AI 用に、指示(プロンプト)と次回来院までに必要な本数・目薬在庫の
+        チャットAI(Evernote AI など)用に、指示(プロンプト)と次回来院までに必要な本数・目薬在庫の
         データ(JSON)をクリップボードにコピーする。
         """
         await self.clipboard.set(to_ai_prompt(self.report(summary=True)))
-        self.notify('Evernote AI 用にコピーしました。Evernote AI に'
-                    '貼り付けてください')
+        self.notify('チャットAI用にコピーしました。チャットAI'
+                    '(Evernote AI など)に貼り付けてください')
 
     # ------------------------------------------------------------ 目薬
     def build_drugs(self) -> list[ft.Control]:

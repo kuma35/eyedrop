@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""export summary as prompt + JSON for Evernote AI
+"""export summary as prompt + JSON for chat AI
 
 JP:
-Evernote AI 用の書き出し
-========================
+チャットAI 用の書き出し
+=======================
 
 次回来院までに必要な本数と目薬在庫のデータを JSON にし、 Evernote AI への指示
 (プロンプト)と一緒にテキストにします。スマホ版はこれをクリップボードに
-コピーし、ユーザーが Android の Evernote アプリの Evernote AI に貼り付けます。
+コピーし、ユーザーがチャットAI(Android の Evernote アプリの Evernote AI など)に貼り付けます。
 
 プロンプトは試行錯誤しながら直すので AI_PROMPT にまとめてあります。
 """

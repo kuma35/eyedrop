@@ -196,7 +196,7 @@ class TestMobileScreens(unittest.TestCase):
         menu = self.texts(self.app.build_topbar().leading.items)
         self.assertIn('サマリーを\nMarkdown でコピー', menu)
         self.assertIn('サマリーを\nテキストでコピー', menu)
-        self.assertIn('サマリーを\nEvernote AI 用にコピー', menu)
+        self.assertIn('サマリーを\nチャットAI用にコピー', menu)
         # 目薬在庫: 経過なし、残日数・通常日数。値の短い列は見出し2段
         tables = [c.controls[0].content for c in controls
                   if isinstance(c, ft.Row) and c.controls

@@ -605,6 +605,22 @@ cd mobile && ../venv/bin/flet build apk --yes --arch arm64-v8a   # → mobile/bu
   2026-09-25 にビルド成功(APK 約 55MB、arm64-v8a)
 - 手元の端末: シャープ SH-54D(AQUOS sense8、arm64)、Android 16
 
+##### Python の版 #####
+
+Android版と CLI版で、必要な Python が違う(2026-10-01 確認)。
+
+| 対象 | Python | 理由・確認 |
+|---|---|---|
+| スマホ(実行時) | 不要(APK に **Python 3.14** を同梱) | APK 内の `libpython3.14.so`(Flet 1.0.1 / serious_python 4.7.1)。利用者は Python を入れなくてよい |
+| APK をビルドする PC | **3.10 以上** | flet・flet-cli・flet-web が `Requires-Python >=3.10`。`mobile/pyproject.toml` も `requires-python = ">=3.10"`。開発は 3.12 の venv |
+| CLI版 | **3.9 以上**(標準ライブラリのみ) | `list[int]` などの型の書き方が 3.9 から。3.8 は起動時に TypeError。`tests/test_drugdb.py` が 3.9〜3.14 で通ることを uv で確認 |
+
+- 共通のコア `drugdb/` はスマホでは 3.14、CLI では 3.9〜で動くので、両方で動く書き方にする
+  (3.10 以降の構文 `X | Y` の型表記・`match` 文などは CLI の 3.9 対応のため使わない)
+- Flet を更新すると同梱される Python の版が変わることがある。更新したら APK 内の `libpython3.*.so` を確認し、
+  その版でコアのテストを流す(`uv run --no-project --python 3.14 python -m unittest tests.test_drugdb`)
+- `requirements.txt` の flet 系は Android版のビルド用(と開発用)。CLI版には不要
+
 ##### 対応する Android のバージョン・端末 #####
 
 理論上(APK の設定から。`aapt2 dump badging mobile/build/apk/eyedrop.apk` で確認):

@@ -1,183 +1,48 @@
-# eyedrop(目薬管理)
+# eyedrop
 
-眼科の受診時に、次の受診までに必要な目薬の種類と本数を算出する Android アプリとコマンドライン(CLI)ツールです。
+An Android app and command-line tool that tracks eye drop stock and estimates
+how many bottles to ask for at your next eye doctor visit.
+The user interface and documentation are in Japanese.
 
-何種類もの目薬を、朝夕・夕だけなど違う点眼パターンで使っていると、1本がもつ日数は目薬ごとに違います。
-手元の在庫、1本を通常何日で使い切るか、いま使っている1本があと何日もつかを把握していないと、
-処方をお願いする本数が多すぎたり、次の受診までに足りなくなったりします。
-このアプリは目薬の入出庫と開封の記録から、来院日から次回来院日までに必要な本数を、根拠とともに計算します。
-
-## スクリーンショット(Android版)
-
-画面はサンプルデータ(`eyedrop-sample.db`)で、次回来院日を4ヶ月後にしたものです。
-
-| サマリー | 目薬在庫・注意 | 目薬 | 目薬の詳細 |
+| Summary | Stock | Eye drops | Detail |
 |---|---|---|---|
-| <img src="images/summary.png" width="200" alt="サマリー"> | <img src="images/stock.png" width="200" alt="目薬在庫"> | <img src="images/drugs.png" width="200" alt="目薬"> | <img src="images/detail.png" width="200" alt="目薬の詳細"> |
+| <img src="images/summary.png" width="180" alt="Summary"> | <img src="images/stock.png" width="180" alt="Stock"> | <img src="images/drugs.png" width="180" alt="Eye drops"> | <img src="images/detail.png" width="180" alt="Detail"> |
 
-目が悪くても見やすいよう、既定は黒地に白の高コントラストで、文字は大きめです(A－/A＋ で変更可)。
+## Features
 
-## できること
+- Records prescriptions, opened bottles and stocktaking
+- Estimates how many days one bottle lasts from recent usage
+- Calculates the bottles needed until the next visit, with the basis of the calculation
+- Backup and restore; the Android app works offline with its own data
 
-- **在庫管理**: 入庫(処方)・出庫(開封)・棚卸しを記録し、未開封の在庫数を把握
-- **ライフタイム管理**: 開封日を記録し、1本が何日もつか(通常期間)を過去の実績から推定。
-  いま使っている1本の推定残日数を表示
-- **次回来院までに必要な本数**: 来院日(既定は今日)から次回来院日(既定は2ヶ月後。日付や「4週間」のような期間で変更可)までに、
-  処方をお願いする本数を計算し、根拠(足りない日数・在庫残日数・未開封・通常期間・開封分残日数)も表示。1本の予備を見込む
-- **イレギュラーの除外**: 途中廃棄・紛失・中断などの記録は推定から外せる。点眼回数が変わったときは「点眼パターン変更」で以前の実績を使わない
-- **随時使用・廃棄期限**: 随時使う目薬は在庫だけ表示。「開封後4週間で廃棄」などの目安を過ぎると知らせる
-- **書き出し**: Markdown・テキスト・チャットAI 用(指示 + JSON)でコピー(CLI版はファイルに出力)
-- **バックアップ・年次更新**: ファイルに保存・復元。古い記録を退避して在庫を繰り越す
+## Install (Android)
 
-Android版と CLI版はそれぞれ別にデータを持ち、共有しません(バックアップのファイルで移せます)。
+Download `eyedrop.apk` from [Releases](../../releases) and install it
+(Android 7.0 or later, arm64-v8a).
 
-## 必要本数の計算
+Signing certificate: `CN=kuma35`, SHA-256
+`97:4A:8A:A3:16:77:C6:CF:66:BA:03:AE:A0:47:88:37:CB:A8:07:05:83:62:6D:FD:34:35:8F:32:19:23:4D:A0`
 
-```
-開封分残日数 = 通常期間 − (来院日 − 開封日)
-在庫残日数   = 開封分残日数 + 未開封の本数 × 通常期間
-足りない日数 = 次回来院日までの日数 − 在庫残日数
-必要本数     = ceil(足りない日数 ÷ 通常期間) + 予備1本   (マイナスは0)
-```
+## Command-line version
 
-- 通常期間は、イレギュラーでない使い切った記録のうち直近3本の平均(整数日に四捨五入)。
-  イレギュラーが1つあれば、それより前の実績はたどらない
-- 来院日の時点で通常期間を超えて使っている1本は、残り0日として数える
-
-## Android版
-
-Google Play には登録していない、いわゆる野良APK です。
-
-### 動作環境
-
-- Android 7.0 以上
-- 64bit の ARM 端末(arm64-v8a)。スマホ・タブレットとも可
-- 実機で確認したのは Android 16(シャープ AQUOS sense8)と Android 10(TECLAST M40 タブレット)
-
-### インストール
-
-[Releases](../../releases) から `eyedrop.apk` をダウンロードし、次のどちらかでインストールします。
-
-- **スマホで直接**: ダウンロードした `eyedrop.apk` をタップ。「この提供元のアプリを許可」を求められたら許可する
-- **PC から USB で**: スマホで開発者向けオプションの「USB デバッグ」をオンにして PC につなぎ、次を実行
-
-  ```sh
-  adb install -r eyedrop.apk
-  ```
-
-インストール直後はデータが空です。「目薬」タブで目薬を追加するか、
-バックアップ(または CLI版の `eyedrop.db`)を「設定」タブの「ファイルから復元」で取り込みます。
-機種変更などに備えて、「設定」タブの「ファイルに保存」でときどきバックアップしてください。
-
-### 署名の確認
-
-配布している APK は次の証明書で署名しています。`apksigner verify --print-certs eyedrop.apk` で表示される値と一致するか確かめてください。
-
-- 証明書: `CN=kuma35`
-- SHA-256: `97:4A:8A:A3:16:77:C6:CF:66:BA:03:AE:A0:47:88:37:CB:A8:07:05:83:62:6D:FD:34:35:8F:32:19:23:4D:A0`
-
-### ビルド
-
-Linux(Ubuntu 24.04 で確認)で APK を作る手順です。
+Requires Python 3.9 or later (standard library only; tested with 3.9 to 3.13).
 
 ```sh
-git clone <リポジトリの URL> eyedrop
+git clone <<this-repo>> eyedrop
 cd eyedrop
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-cd mobile
-../venv/bin/flet build apk --yes --arch arm64-v8a    # → build/apk/eyedrop.apk
-~/Android/sdk/platform-tools/adb install -r build/apk/eyedrop.apk
+drugdb/cmd_drugdb.sh help
 ```
 
-- 初回のビルドは Flutter・JDK・Android SDK を自動で取り込むので時間がかかります
-- 32bit の ARM 端末向けには `--arch armeabi-v7a` で作ります
-- 自分でビルドした APK は PC の開発用の鍵で署名されるので、配布版の上には上書きできません。
-  バックアップを取ってアンインストールしてから入れ、「ファイルから復元」でデータを戻してください
+`eyedrop-sample.db` is sample data. Copy it before use, as opening it updates the file.
 
-## CLI版
+## Documentation
 
-### 動作環境
+Detailed documentation (in Japanese) will be available on GitHub Pages.
 
-- Linux(Ubuntu 24.04 で確認)、Python 3.12 で確認
-- 標準ライブラリだけで動きます。追加のパッケージは不要です
+## License
 
-### 使い方
+MIT License. See [LICENSE](LICENSE).
 
-```sh
-git clone <リポジトリの URL> eyedrop
-cd eyedrop
-drugdb/cmd_drugdb.sh help        # コマンド一覧
-drugdb/cmd_drugdb.sh             # 引数なしなら対話シェル
-```
+## Disclaimer
 
-データベースは既定でプロジェクト直下の `eyedrop.db`(無ければ新規作成)です。
-別のファイルは `-f` か環境変数 `EYEDROP_DB` で指定します(指定したファイルが無いとエラー。新しく作るときは `--create`)。
-
-```sh
-drugdb/cmd_drugdb.sh add 目薬A                      # 目薬を登録
-drugdb/cmd_drugdb.sh in 目薬A 3 -d 2026-07-10       # 3本処方された(入庫)
-drugdb/cmd_drugdb.sh open 目薬A                     # 新しい1本を開封(前の1本は使い切り)
-drugdb/cmd_drugdb.sh report -n 4週間 --plain        # 受診前サマリー(次回来院日は4週間後)
-```
-
-### 出力の例
-
-サンプルデータで、来院日 2026-10-01、次回来院日を4ヶ月後にしたテキスト版のサマリーです
-(サンプルデータは開くと更新されるので、コピーして使います)。
-
-```sh
-cp eyedrop-sample.db my-sample.db
-drugdb/cmd_drugdb.sh -f my-sample.db report -v 2026-10-01 -n 4ヶ月 --plain
-```
-
-```
-目薬 受診前サマリー
-来院日 2026-10-01
-次回来院日 2027-01-29(120日後)
-
-■ 次回来院までに必要な本数
-コソプト(ドルモロール)  必要本数2  足りない日数18  在庫残日数102  未開封3  通常期間27  開封分残日数21
-キサラタン(ラタノプロスト)  必要本数2  足りない日数30  在庫残日数90  未開封3  通常期間30  開封分残日数0
-グラナテック  必要本数2  足りない日数19  在庫残日数101  未開封3  通常期間32  開封分残日数5
-シアノコバラミン  必要本数0  足りない日数-506  在庫残日数626  未開封3  通常期間167  開封分残日数125
-・必要本数…処方をお願いする本数。足りない日数 ÷ 通常期間 を切り上げ、予備1本を足した本数(0未満は0)。0 は処方不要
-・足りない日数…次回来院日までの日数 − 在庫残日数。マイナスは余る日数
-(各項目の説明が続く)
-
-■ 目薬在庫
-コソプト(ドルモロール)  未開封3  開封日9/25  残日数21  通常日数28
-キサラタン(ラタノプロスト)  未開封3  開封日9/1  残日数0  通常日数28
-グラナテック  未開封3  開封日9/4  残日数5  通常日数32
-シアノコバラミン  未開封3  開封日8/20  残日数125  通常日数164
-
-■ 注意
-・[info] キサラタン(ラタノプロスト): 開封から30日経過。廃棄期限(4週間)を過ぎています
-```
-
-コソプトなら、来院日の時点で開封中の1本が21日分、未開封3本 × 27日で在庫残日数は102日。
-次回来院日までの120日に対して 120 − 102 = 18日足りないので、18 ÷ 27 を切り上げて1本、予備1本を足して2本です。
-
-`--plain` を付けなければ Markdown で出力します(`-o ファイル` でファイルにも出力)。
-
-## サンプルデータ
-
-`eyedrop-sample.db` は作者の実データから医療機関名・医師名を仮名にしたものです。
-
-- CLI版: コピーしてから `-f` で指定して開きます(上の例)
-- Android版: 本番データを「ファイルに保存」でバックアップしてから、スマホに転送した `eyedrop-sample.db` を「ファイルから復元」で取り込みます
-
-## テスト
-
-```sh
-venv/bin/python -m unittest discover -s tests
-```
-
-## ライセンス
-
-MIT License([LICENSE](LICENSE))
-
-## 注意
-
-このツールは目薬の点眼の記録と、受診時に伝える目薬の本数の目安を出すためのものです。
-実際の処方や点眼の方法は、必ず医師の指示に従ってください。
+This tool only gives an estimate. Always follow your doctor's instructions.

@@ -1,4 +1,6 @@
-# スマホ版(mobile/)。flet-cli は APK ビルド、flet-web は Web 表示での確認用
+# CLI版(drugdb/)は Python 3.9 以上・標準ライブラリのみで動き、このファイルは不要。
+# スマホ版(mobile/)。flet-cli は APK ビルド、flet-web は Web 表示での確認用。
+# flet は Python 3.10 以上が必要(ビルドする PC 側。APK には Python 3.14 が同梱される)
 flet==1.0.1
 flet-cli==1.0.1
 flet-web==1.0.1

@@ -202,6 +202,8 @@
   2点目: `help` 一覧の先頭に「各サブコマンドの詳しいヘルプは -h(例: drugs -h、または help drugs)」の案内を追加。
   テスト `test_parse_error_shows_subcommand_help` を追加、`test_help_lists_flags` に案内文の確認を追加。
   `unittest discover -s tests`(74件)・`flake8` とも成功
+  
+- [x] CLI版をインストールできるようにするのと、 @QIITA.md の 「CLI版」の「インストール方法」にインストール方法記述
 
 ## Android版
 

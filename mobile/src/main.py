@@ -10,9 +10,10 @@ drugdb パッケージを PC 版と共通で使います。
 
 画面は下部のタブで切り替えます。
 
-- サマリー: 次回来院までに必要な本数・目薬在庫の表。共有メニューで Markdown を送る
+- サマリー: 来院日・次回来院日と、次回来院までに必要な本数(と根拠)・目薬在庫の表。
+  メニューから Markdown 等でコピー
 - 目薬: 開封・入庫・棚卸し。薬ごとの履歴と設定
-- 設定: バックアップ・復元・年次更新・次回来院までに必要な本数の期間・表示テーマ
+- 設定: バックアップ・復元・年次更新・次回来院日の既定の期間・表示テーマ
 
 目が悪くても見やすいよう、既定は黒地に白の高コントラストで文字は大きめ。
 """
@@ -27,20 +28,23 @@ from drugdb.ai_export import to_ai_prompt
 from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
-from drugdb.report import (DEFAULT_SPANS, NAME_HEAD, SPAN_UNITS,
-                           default_sub_spans, get_spans, line_name,
-                           make_report, notices, opened_text, pattern_cell,
-                           remaining_text, set_spans, span_label,
-                           span_to_unit, to_markdown, to_plain_text,
-                           unit_to_span)
+from drugdb.report import (DEFAULT_SPAN, NAME_HEAD, SPAN_UNITS, basis_cells,
+                           get_default_span, line_name, make_report,
+                           need_cell, notices, opened_text, remaining_text,
+                           set_default_span, span_label, span_to_unit,
+                           to_markdown, to_plain_text, unit_to_span)
 from drugdb.rollover import rollover
 
 APP_TITLE = '目薬管理'
 DB_NAME = 'eyedrop.db'
 
-# 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)。
-# 次回来院までに必要な本数の期間の列名は span_label(days, 'short')
+# 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)
 UNOPENED_HEAD = '未\n開封'
+# 次回来院までに必要な本数の表の列(名前の後)。必要本数に続いて根拠
+# (report.BASIS_HEADS と同じ順: 足りない日数・在庫残日数・未開封・通常期間・
+# 開封分残日数)
+NEED_HEADS = ['必要\n本数', '足りない\n日数', '在庫\n残日数', UNOPENED_HEAD,
+              '通常\n期間', '開封分\n残日数']
 
 # コメント欄の最大文字数(一言メモ程度)
 MEMO_MAX = 100
@@ -194,6 +198,10 @@ class EyedropApp:
         self.tab = 0
         self.detail_drug: Optional[int] = None  # 目薬タブで詳細表示中の薬
         self.show_ended = False  # 目薬タブで利用終了した目薬も表示
+        # サマリーの来院日・次回来院日(None なら今日・来院日 + 既定の期間)。
+        # アプリを閉じると既定に戻る
+        self.visit_date: Optional[date] = None
+        self.next_date: Optional[date] = None
         self.share: Optional[ft.Share] = None
         self.picker: Optional[ft.FilePicker] = None
         # 縦スクロール(常にスクロールバーを表示)
@@ -237,9 +245,28 @@ class EyedropApp:
             return self.db.current_name(drug_id)
         return self.db.find_drug(drug_id)['name']
 
-    def report(self):
-        """summary report with current name mode"""
-        return make_report(self.db, name_mode=self.name_mode)
+    def summary_dates(self) -> tuple[date, date]:
+        """(visit date, next visit date) of summary
+
+        JP:
+        サマリーの来院日と次回来院日。未指定なら今日と来院日 + 既定の期間。
+        """
+        visit = self.visit_date or date.today()
+        return visit, self.next_date or visit + timedelta(
+            days=get_default_span(self.db))
+
+    def report(self, summary: bool = False):
+        """report with current name mode
+
+        JP:
+        レポート。 summary ならサマリーの来院日・次回来院日で、
+        そうでなければ今日時点(目薬タブの開封中の状態など)。
+        """
+        if not summary:
+            return make_report(self.db, name_mode=self.name_mode)
+        visit, next_visit = self.summary_dates()
+        return make_report(self.db, today=visit, next_visit=next_visit,
+                           name_mode=self.name_mode)
 
     def change_font(self, step: int):
         """make font larger (step=1) or smaller (step=-1)
@@ -489,17 +516,87 @@ class EyedropApp:
             padding=ft.Padding.only(bottom=SCROLLBAR_THICKNESS + 6),
             content=data_table)])
 
+    def summary_date_button(self, label: str, value: date,
+                            on_pick: Callable[[date], None]) -> ft.Control:
+        """button showing summary date, opens date picker
+
+        JP:
+        サマリーの日付ボタン。押すとカレンダーで日付を選び、 on_pick を呼ぶ。
+        """
+        def picked(e):
+            chosen = picked_date(e.control.value)
+            if chosen is not None:
+                on_pick(chosen)
+
+        def open_picker(_e):
+            self.page.show_dialog(ft.DatePicker(
+                value=datetime.combine(value, datetime.min.time()),
+                first_date=datetime(2020, 1, 1),
+                last_date=datetime(2100, 12, 31), on_change=picked))
+
+        return ft.OutlinedButton(content=self.text(label),
+                                 icon=ft.Icons.CALENDAR_MONTH,
+                                 on_click=open_picker)
+
+    def set_visit_date(self, value: Optional[date]):
+        """change visit date of summary (None: today)
+
+        JP:
+        サマリーの来院日を変える(None で今日)。次回来院日を指定済みで、
+        それが来院日以前になるなら次回来院日を既定に戻す。
+        """
+        self.visit_date = value
+        if self.next_date and self.next_date <= self.summary_dates()[0]:
+            self.next_date = None
+            self.notify('次回来院日を既定に戻しました')
+        self.refresh()
+
+    def set_next_date(self, value: Optional[date]):
+        """change next visit date of summary (None: default)"""
+        if value is not None and value <= self.summary_dates()[0]:
+            self.notify('次回来院日は来院日より後の日付にしてください',
+                        error=True)
+            return
+        self.next_date = value
+        self.refresh()
+
+    def summary_date_controls(self, visit: date,
+                              next_visit: date) -> list[ft.Control]:
+        """visit / next visit date buttons of summary
+
+        JP:
+        サマリー先頭の来院日・次回来院日の欄。押すとカレンダーで変えられる。
+        変えたときは「今日に戻す」「既定に戻す」を出す。
+        """
+        default = span_label(get_default_span(self.db))
+        visit_row = [self.summary_date_button(
+            f'来院日 {visit.isoformat()}', visit, self.set_visit_date)]
+        if self.visit_date:
+            visit_row.append(ft.TextButton(
+                content=self.text('今日に戻す', 0.9),
+                on_click=lambda e: self.set_visit_date(None)))
+        next_row = [self.summary_date_button(
+            f'次回来院日 {next_visit.isoformat()}'
+            f'({(next_visit - visit).days}日後)', next_visit,
+            self.set_next_date)]
+        if self.next_date:
+            next_row.append(ft.TextButton(
+                content=self.text(f'既定({default}後)に戻す', 0.9),
+                on_click=lambda e: self.set_next_date(None)))
+        return [ft.Row(wrap=True, spacing=8, run_spacing=8, controls=row)
+                for row in (visit_row, next_row)]
+
     def build_summary(self) -> list[ft.Control]:
         """summary tab
 
         JP:
-        サマリー: 次回来院までに必要な本数と目薬在庫の表、注意、共有ボタン。
+        サマリー: 来院日・次回来院日、次回来院までに必要な本数(と根拠)と
+        目薬在庫の表、注意。
         """
-        report = self.report()
+        report = self.report(summary=True)
         mode = report.name_mode
-        pattern_rows = [[line_name(line, mode), line.req.stock]
-                        + [pattern_cell(r) for r in line.patterns]
-                        for line in report.lines]
+        need_rows = [[line_name(line, mode), need_cell(line.req)]
+                     + basis_cells(line.req) for line in report.lines]
         stock_rows = []
         for line in report.lines:
             req = line.req
@@ -515,21 +612,25 @@ class EyedropApp:
                            else None)
                  for line in report.lines for level, text in notices(line)]
         controls = [
-            self.text(f'{report.today.isoformat()} 時点', 0.9),
+            *self.summary_date_controls(report.today, report.next_visit),
             self.heading('次回来院までに必要な本数'),
-            self.table([NAME_HEAD[mode], UNOPENED_HEAD]
-                       + report.span_labels('short'),
-                       pattern_rows, numeric=(1,)),
-            self.text(f'今日(来院時)の時点で、次の診察が'
-                      f'{span_label(report.spans[0])}後なら目薬が何本必要かの表。'
-                      '必要N…処方をお願いする本数(予備1本込み・最大3本)。'
-                      '空欄は処方不要', 0.8),
+            self.table([NAME_HEAD[mode]] + NEED_HEADS, need_rows,
+                       numeric=(1, 2, 3, 4, 5, 6)),
+            self.text('必要本数：処方をお願いする本数(足りない日数÷通常期間を'
+                      '切り上げて予備1本を足す)。0は処方不要。'
+                      '足りない日数：次回来院日までの日数−在庫残日数'
+                      '(マイナスは余る日数)。'
+                      '在庫残日数：来院日の時点で残っている目薬の日数'
+                      '(開封分残日数＋未開封×通常期間)。'
+                      '通常期間：1本を何日で使い切るか。'
+                      '開封分残日数：来院日の時点での、いま使っている1本の'
+                      '残り日数(通常期間−(来院日−開封日))', 0.8),
             self.heading('目薬在庫'),
             self.table([NAME_HEAD[mode], UNOPENED_HEAD, '開封日', '残\n日数',
                         '通常\n日数'],
                        stock_rows, numeric=(1, 3, 4)),
             self.text('開封日：現在使っている目薬を開封した日。'
-                      '残日数：今日時点で現在使っている目薬の推定残量(日数)、'
+                      '残日数：来院日の時点で現在使っている目薬の推定残量(日数)、'
                       '通常日数：この目薬は通常何日で使い切っているか', 0.8),
         ]
         if notes:
@@ -547,7 +648,7 @@ class EyedropApp:
         サマリーを Markdown でクリップボードにコピーする。
         Evernote へは手動で貼り付ける(共有メニューではうまくいかなかったため)。
         """
-        await self.clipboard.set(to_markdown(self.report()))
+        await self.clipboard.set(to_markdown(self.report(summary=True)))
         self.notify('Markdown をコピーしました。Evernote Web に'
                     '貼り付けてください')
 
@@ -559,7 +660,7 @@ class EyedropApp:
         Android アプリは貼り付けるとテキストのままになるので、記号の少ない
         読みやすい形にしたもの。
         """
-        await self.clipboard.set(to_plain_text(self.report()))
+        await self.clipboard.set(to_plain_text(self.report(summary=True)))
         self.notify('テキストをコピーしました。Evernote アプリに'
                     '貼り付けてください')
 
@@ -570,7 +671,7 @@ class EyedropApp:
         Evernote AI 用に、指示(プロンプト)と次回来院までに必要な本数・目薬在庫の
         データ(JSON)をクリップボードにコピーする。
         """
-        await self.clipboard.set(to_ai_prompt(self.report()))
+        await self.clipboard.set(to_ai_prompt(self.report(summary=True)))
         self.notify('Evernote AI 用にコピーしました。Evernote AI に'
                     '貼り付けてください')
 
@@ -881,8 +982,9 @@ class EyedropApp:
         controls += [
             self.text(f'未開封 {req.stock}本 / '
                       f'{opened_text(req, REMAINING_LABEL)}', 0.95),
-            self.text(f'1本あたり推定 {req.estimate.days:.0f}日'
-                      if req.estimate.days else '1本あたり推定: 実績なし', 0.9),
+            self.text(f'通常期間(1本あたり推定) {req.normal}日'
+                      if req.normal else '通常期間(1本あたり推定): 実績なし',
+                      0.9),
             self.labeled_switch(
                 AS_NEEDED_LABEL, bool(drug['as_needed']),
                 lambda e: self.run(lambda: self.db.update_drug(
@@ -890,6 +992,14 @@ class EyedropApp:
             # 代表目薬名ごとの利用終了・取り消しは目薬タブのカードで行う
             self.button('廃棄期限設定', lambda e: self.on_max_days(drug_id),
                         icon=ft.Icons.TIMER, filled=False),
+            self.button('点眼パターン変更',
+                        lambda e: self.on_change_pattern(drug_id),
+                        icon=ft.Icons.EDIT_CALENDAR, filled=False),
+        ]
+        if drug['pattern_date']:
+            controls.append(self.text(
+                f"点眼パターン変更 {drug['pattern_date']}", 0.9))
+        controls += [
             self.heading('開封の履歴'),
             self.text('タップでイレギュラー(推定に使わない)を切り替え', 0.8),
         ]
@@ -929,6 +1039,34 @@ class EyedropApp:
             spacing=0, controls=rows,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH))
         return controls
+
+    def on_change_pattern(self, drug_id: int):
+        """eye drop pattern change dialog
+
+        JP:
+        点眼パターン変更のダイアログ。変更日より前に開封した分(開封中を含む)を
+        イレギュラーにし、メモに「点眼パターン変更」とコメントを追記する。
+        """
+        chosen = {'date': date.today()}
+        name = self.drug_label(drug_id)
+        memo = self.memo_field()
+
+        def ok():
+            marked = self.db.change_pattern(drug_id, chosen['date'],
+                                            memo_value(memo))
+            return (f'{name}: 点眼パターン変更。'
+                    f'{len(marked)}件をイレギュラーにしました')
+
+        when = self.date_button(chosen['date'],
+                                lambda d: chosen.update(date=d),
+                                prefix='変更日')
+        self.ask(f'{name} の点眼パターン変更', [
+            self.text('1日の点眼回数や点眼する眼が変わったときに使います。'
+                      '変更日より前に開封した目薬(使用中の1本を含む)を'
+                      'イレギュラー(推定に使わない)にし、開封の履歴のメモに'
+                      '「点眼パターン変更」と記録します。変更後の目薬を1本'
+                      '使い切るまで、必要本数は「相談」になります。', 0.9),
+            when, memo], '変更', ok)
 
     def history_row(self, label: str, note: Optional[str], color=None,
                     on_click=None) -> ft.Control:
@@ -1105,7 +1243,7 @@ class EyedropApp:
         """data tab
 
         JP:
-        設定: バックアップ・復元・年次更新・次回来院までに必要な本数の期間・表示テーマ。
+        設定: バックアップ・復元・年次更新・次回来院日の既定の期間・表示テーマ。
         """
         theme = self.db.get_meta('theme_mode') or 'dark'
         return [
@@ -1125,8 +1263,10 @@ class EyedropApp:
             self.text('指定した年より前の記録を退避し、在庫を繰り越します。', 0.9),
             self.button('年次更新', lambda e: self.on_rollover(),
                         icon=ft.Icons.EVENT_REPEAT, filled=False),
-            self.heading('次回来院までに必要な本数の期間'),
-            self.text('次の診察までの期間を月・週・日で指定します。', 0.9),
+            self.heading('次回来院日の既定'),
+            self.text('サマリーの次回来院日を、来院日から何日後にするかを'
+                      '月・週・日で指定します(サマリーでカレンダーから'
+                      '変えることもできます)。', 0.9),
             *self.span_controls(),
             self.heading('表示'),
             self.text('文字の大きさは画面上部の「A－」「A＋」で変えられます。',
@@ -1140,62 +1280,36 @@ class EyedropApp:
         ]
 
     def span_controls(self) -> list[ft.Control]:
-        """span setting fields (number + unit)
+        """default span setting field (number + unit)
 
         JP:
-        次回来院までに必要な本数の期間の設定欄。次回診察日は月単位・週単位で決まるので
+        次回来院日の既定の期間の設定欄。次回診察日は月単位・週単位で決まるので
         「数 + 単位(ヶ月/週間/日)」で入れる(1ヶ月=30日、1週間=7日で換算)。
-        通常の期間を変えると残り2つに半分・さらに半分(単位に合わせて丸める)を
-        自動で入れる。
         """
-        spans = list(get_spans(self.db))
-        spans += [0] * (3 - len(spans))
-        rows = []
-
-        def span_row(label: str, days: int):
-            number, unit = span_to_unit(days) if days else ('', '週間')
-            num = ft.TextField(value=str(number), label=label, width=110,
-                               text_size=self.size(1.1),
-                               keyboard_type=ft.KeyboardType.NUMBER,
-                               input_filter=ft.NumbersOnlyInputFilter())
-            unit_box = ft.Dropdown(
-                value=unit, width=130, text_size=self.size(),
-                options=[ft.DropdownOption(key=u, text=u) for u in SPAN_UNITS])
-            rows.append((num, unit_box))
-            return ft.Row(spacing=8, controls=[num, unit_box])
-
-        controls = [span_row('通常', spans[0]), span_row('2つ目', spans[1]),
-                    span_row('3つ目', spans[2])]
-
-        def normal_changed(_e):
-            num, unit_box = rows[0]
-            try:
-                normal = unit_to_span(num.value, unit_box.value)
-            except ValueError:
-                return
-            subs = default_sub_spans(normal)[1:]
-            for (sub_num, sub_unit), days in zip(rows[1:], subs):
-                sub_num.value, sub_unit.value = map(str, span_to_unit(days))
-                sub_num.update()
-                sub_unit.update()
-
-        rows[0][0].on_change = normal_changed
-        rows[0][1].on_select = normal_changed
+        number, unit = span_to_unit(get_default_span(self.db))
+        num = ft.TextField(value=str(number), label='来院日から', width=130,
+                           text_size=self.size(1.1),
+                           keyboard_type=ft.KeyboardType.NUMBER,
+                           input_filter=ft.NumbersOnlyInputFilter())
+        unit_box = ft.Dropdown(
+            value=unit, width=130, text_size=self.size(),
+            options=[ft.DropdownOption(key=u, text=u) for u in SPAN_UNITS])
 
         def save(_e):
             def ok():
-                days = [unit_to_span(num.value, unit_box.value)
-                        for num, unit_box in rows if (num.value or '').strip()]
-                saved = set_spans(self.db, days)
-                return '期間を ' + ' / '.join(span_label(d) for d in saved) \
-                    + ' にしました'
+                days = set_default_span(
+                    self.db, unit_to_span(num.value, unit_box.value))
+                return f'次回来院日の既定を{span_label(days)}後にしました'
             self.run(ok)
 
         def reset(_e):
-            self.run(lambda: set_spans(self.db, DEFAULT_SPANS) and
-                     '期間を元に戻しました(2ヶ月 / 4週間 / 2週間)')
+            self.run(lambda: set_default_span(self.db, DEFAULT_SPAN) and
+                     f'次回来院日の既定を元に戻しました'
+                     f'({span_label(DEFAULT_SPAN)}後)')
 
-        return controls + [
+        return [
+            ft.Row(spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                   controls=[num, unit_box, self.text('後')]),
             ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
                 self.button('期間を設定', save, icon=ft.Icons.CHECK),
                 self.button('元に戻す', reset, icon=ft.Icons.UNDO,

@@ -28,9 +28,12 @@ STOCK_KINDS = ('in', 'out', 'inventory')
 # 終了日なしで残った古い開封を直したときのメモ
 STALE_NOTE = '(終了日なしのため次の開封日で終了扱い)'
 
+# 点眼パターン変更でイレギュラーにしたライフタイムのメモ
+PATTERN_NOTE = '点眼パターン変更'
+
 # 更新を許可する drug の列
 DRUG_COLUMNS = ('name', 'start_date', 'end_date', 'max_days',
-                'default_days', 'as_needed', 'note')
+                'default_days', 'as_needed', 'note', 'pattern_date')
 
 
 class DrugDbError(Exception):
@@ -561,6 +564,33 @@ class DrugDb():
         if cur.rowcount == 0:
             raise DrugDbError(f'ライフタイムがありません: {lifetime_id}')
 
+    def change_pattern(self, key, change_date=None, memo=None) -> list[int]:
+        """eye drop pattern changed: exclude earlier lifetimes
+
+        JP:
+        点眼パターン(1日の点眼回数など)の変更。 change_date(省略時今日)より前に
+        開封した分(開封中を含む)をイレギュラーにし、メモに「点眼パターン変更」
+        (memo があれば続けて)を追記する。既にイレギュラーのものはそのまま。
+        変更日を drug.pattern_date に記録し、それより前の年の過去年値も
+        推定に使わない。イレギュラーにした lifetime_id の一覧を返す。
+        """
+        drug_id = self.find_drug(key)['drug_id']
+        day = iso(change_date)
+        text = f'{PATTERN_NOTE}({day})' + (f' {memo}' if memo else '')
+        marked = []
+        with self.conn:
+            for row in self.lifetimes(drug_id):
+                if row['use_start'] >= day or row['irregular']:
+                    continue
+                note = f"{row['note']} / {text}" if row['note'] else text
+                self.conn.execute(E.SET_IRREGULAR, {
+                    'irregular': 1, 'note': note,
+                    'lifetime_id': row['lifetime_id']})
+                marked.append(row['lifetime_id'])
+            self.conn.execute(E.UPDATE_DRUG.format(column='pattern_date'),
+                              {'value': day, 'drug_id': drug_id})
+        return marked
+
     def delete_lifetime(self, lifetime_id: int):
         """delete lifetime record (for correction)"""
         with self.conn:
@@ -621,8 +651,13 @@ class DrugDb():
         1本の推定使用日数。 as_of を指定するとその日までの実績で推定。
         """
         drug = self.find_drug(key)
+        summaries = self.summaries(drug['drug_id'])
+        if drug['pattern_date']:
+            # 点眼パターン変更より前の年の過去年値は使わない
+            year = to_date(drug['pattern_date']).year
+            summaries = [row for row in summaries if row['year'] >= year]
         return estimate_days(self.lifetimes(drug['drug_id'], as_of),
-                             self.summaries(drug['drug_id']),
+                             summaries,
                              default_days=drug['default_days'], **kwargs)
 
     def requirement(self, key, span: int, today=None, margin_days: int = 0,

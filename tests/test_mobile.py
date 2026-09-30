@@ -6,7 +6,7 @@ JP:
 flet が入っていなければスキップ。
 """
 import os
-from datetime import date
+from datetime import date, timedelta
 import sys
 import tempfile
 import unittest
@@ -203,8 +203,10 @@ class TestMobileScreens(unittest.TestCase):
                   and isinstance(getattr(c.controls[0], 'content', None),
                                  ft.DataTable)]
         heads = [[col.label.value for col in t.columns] for t in tables]
-        self.assertEqual(heads[0][1:], ['未\n開封', '2ヶ月', '1ヶ月\n(4週間)',
-                                        '2週間'])
+        self.assertEqual(heads[0][1:], ['必要\n本数', '足りない\n日数',
+                                        '在庫\n残日数',
+                                        '未\n開封', '通常\n期間',
+                                        '開封分\n残日数'])
         self.assertEqual(heads[1][1:], ['未\n開封', '開封日', '残\n日数',
                                         '通常\n日数'])
         self.assertGreater(tables[1].heading_row_height, self.app.size(2.4))
@@ -304,7 +306,7 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('推定残り約30日', detail)
 
     def test_todo_labels_and_spans(self):
-        from drugdb.report import get_spans
+        from drugdb.report import get_default_span
         # 目薬タブの先頭に「目薬追加」(フロートボタンは無い)
         controls = self.app.build_drugs()
         first = controls[0]
@@ -312,26 +314,49 @@ class TestMobileScreens(unittest.TestCase):
         self.assertEqual(first.content.value, '目薬追加')
         # サマリーの説明文
         text = self.texts(self.app.build_summary())
-        self.assertIn('今日(来院時)の時点で、次の診察が2ヶ月後なら'
-                      '目薬が何本必要かの表。', text)
+        self.assertIn('足りない日数：次回来院日までの日数−在庫残日数', text)
         self.assertIn('開封日：現在使っている目薬を開封した日。', text)
         self.assertIn('通常日数：この目薬は通常何日で使い切っているか', text)
-        # 設定タブで期間を設定
+        # 設定タブで次回来院日の既定の期間を設定
         data = self.app.build_data()
         rows = [top.controls for top in data if isinstance(top, ft.Row)
                 and top.controls and isinstance(top.controls[0], ft.TextField)]
         self.assertEqual([(r[0].value, r[1].value) for r in rows],
-                         [('2', 'ヶ月'), ('4', '週間'), ('2', '週間')])
-        self.app.db.set_meta('spans', '90,45,22')
-        self.assertEqual(get_spans(self.app.db), (90, 45, 22))
-        summary = self.app.build_summary()
-        self.assertIn('次の診察が3ヶ月後なら', self.texts(summary))
-        table = [c.controls[0].content for c in summary
-                 if isinstance(c, ft.Row) and c.controls
-                 and isinstance(getattr(c.controls[0], 'content', None),
-                                ft.DataTable)][0]
-        self.assertEqual([col.label.value for col in table.columns][2:],
-                         ['3ヶ月', '45日', '22日'])
+                         [('2', 'ヶ月')])
+        self.app.db.set_meta('spans', '90')
+        self.assertEqual(get_default_span(self.app.db), 90)
+        today = date.today()
+        self.assertIn(f'次回来院日 {today + timedelta(days=90)}(90日後)',
+                      self.texts(self.app.build_summary()))
+
+    def test_summary_dates(self):
+        today = date.today()
+        text = self.texts(self.app.build_summary())
+        self.assertIn(f'来院日 {today}', text)
+        self.assertIn(f'次回来院日 {today + timedelta(days=60)}(60日後)', text)
+        self.assertNotIn('今日に戻す', text)
+        # 来院日を変えると次回来院日(既定)も動く
+        self.app.set_visit_date(date(2024, 6, 11))
+        text = self.texts(self.app.build_summary())
+        self.assertIn('来院日 2024-06-11', text)
+        self.assertIn('次回来院日 2024-08-10(60日後)', text)
+        self.assertIn('今日に戻す', text)
+        self.app.set_next_date(date(2024, 7, 9))
+        text = self.texts(self.app.build_summary())
+        self.assertIn('次回来院日 2024-07-09(28日後)', text)
+        self.assertIn('既定(2ヶ月後)に戻す', text)
+        self.assertIn('来院日 2024-06-11', self.app.report(summary=True)
+                      .visit_text)
+        # 目薬タブは今日時点のまま
+        self.assertEqual(self.app.report().today, today)
+        # 来院日以前の次回来院日は受け付けない
+        self.app.set_next_date(date(2024, 6, 11))
+        self.assertEqual(self.app.next_date, date(2024, 7, 9))
+        # 来院日が次回来院日以降になったら次回来院日は既定に戻る
+        self.app.set_visit_date(date(2024, 7, 9))
+        self.assertIsNone(self.app.next_date)
+        self.app.set_visit_date(None)
+        self.assertEqual(self.app.summary_dates()[0], today)
 
     def test_detail(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
@@ -357,6 +382,25 @@ class TestMobileScreens(unittest.TestCase):
         self.assertFalse(any(isinstance(c, (ft.ListTile, ft.IconButton))
                              and getattr(c, 'icon', None) == ft.Icons.DELETE
                              for c in found))
+
+    def test_change_pattern(self):
+        db = self.app.db
+        drug_id = db.find_drug('A')['drug_id']
+        self.assertIn('点眼パターン変更', self.texts(
+            self.app.build_detail(drug_id)))
+        # ダイアログの OK を押したことにする(page が無いので ask を差し替え)
+        asked = {}
+        self.app.ask = lambda title, controls, label, on_ok: asked.update(
+            title=title, on_ok=on_ok)
+        self.app.on_change_pattern(drug_id)
+        self.assertEqual(asked['title'], 'A の点眼パターン変更')
+        self.assertIn('2件をイレギュラーにしました', asked['on_ok']())
+        lives = db.lifetimes('A')
+        self.assertTrue(all(r['irregular'] for r in lives))
+        self.assertTrue(lives[-1]['note'].startswith('点眼パターン変更('))
+        detail = self.texts(self.app.build_detail(drug_id))
+        self.assertIn(f'点眼パターン変更 {date.today()}', detail)
+        self.assertIn('通常期間(1本あたり推定): 実績なし', detail)
 
     def test_data_and_font_scale(self):
         text = self.texts(self.app.build_data())

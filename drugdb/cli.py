@@ -8,7 +8,7 @@ JP:
 .. code-block:: shell
 
    python3 -m drugdb                 # 対話シェル
-   python3 -m drugdb report -s 60    # コマンドを1つ実行して終了
+   python3 -m drugdb report -n 2ヶ月  # コマンドを1つ実行して終了
    python3 -m drugdb -f other.db drugs
    python3 -m drugdb -f other.db --create add コソプト  # 新規データベースを作る
 
@@ -19,21 +19,24 @@ JP:
 
 日付は YYYY-MM-DD 、 YYYY/MM/DD または MM/DD(今年)で指定できます。
 省略すると今日です。
+期間は「2ヶ月」「8週間」「60日」「60」のように指定できます(1ヶ月=30日)。
 """
 import argparse
 import os
 import shlex
 import sys
 from cmd import Cmd
-from datetime import date
+from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
+from typing import Optional
 
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
 from .ai_export import to_ai_prompt
 from .import_ods import import_ods
-from .report import (estimate_text, make_report, opened_text, to_markdown,
-                     to_plain_text)
+from .report import (estimate_text, get_default_span, make_report,
+                     opened_text, parse_span, set_default_span, span_label,
+                     to_markdown, to_plain_text)
 from .rollover import rollover
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / 'eyedrop.db'
@@ -54,6 +57,32 @@ def parse_date(text: str) -> date:
     except ValueError:
         pass
     raise argparse.ArgumentTypeError(f'日付が不正です: {text}')
+
+
+def parse_next(text: str) -> tuple[str, object]:
+    """parse next visit (date or span)
+
+    JP:
+    次回来院日の指定。日付なら ('date', date)、期間なら ('span', 日数)。
+    """
+    try:
+        return 'date', parse_date(text)
+    except argparse.ArgumentTypeError:
+        pass
+    try:
+        return 'span', parse_span(text)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(
+            f'次回来院日は日付か期間(例: 11/28、2ヶ月、8週間、60日)で'
+            f'指定してください: {text}') from err
+
+
+def parse_span_arg(text: str) -> int:
+    """argparse type of span"""
+    try:
+        return parse_span(text)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
 
 
 class _Parser(argparse.ArgumentParser):
@@ -139,6 +168,10 @@ class DrugDbShell(Cmd):
         super().__init__(stdout=stdout)
         self.db = db
         self.failed = False
+        # 来院日(None なら今日)と次回来院日(None なら来院日 + 既定の期間)。
+        # 次回来院日は ('date', 日付) か ('span', 来院日から何日後か)
+        self.visit: Optional[date] = None
+        self.next_visit: Optional[tuple[str, object]] = None
 
     def print(self, *values):
         """print to shell stdout"""
@@ -266,6 +299,8 @@ class DrugDbShell(Cmd):
                       else ''))
         if drug['as_needed']:
             self.print('  随時使用')
+        if drug['pattern_date']:
+            self.print(f"  点眼パターン変更 {drug['pattern_date']}")
         for key in ('max_days', 'default_days', 'note'):
             if drug[key] is not None:
                 self.print(f'  {key}: {drug[key]}')
@@ -339,6 +374,15 @@ class DrugDbShell(Cmd):
         self.db.finish_bottle(args.drug, args.date, args.irregular,
                               args.memo)
 
+    @command(DRUG, ('-d', '--date', {'type': parse_date, 'default': None,
+                                     'help': '変更日(省略時今日)'}), MEMO)
+    def do_pattern(self, args):
+        """点眼パターン変更(変更日より前の開封分をイレギュラーにして推定から外す)"""
+        marked = self.db.change_pattern(args.drug, args.date, args.memo)
+        self.print(f'点眼パターン変更: {len(marked)}件をイレギュラーにしました'
+                   + (f"(ライフタイム {', '.join(map(str, marked))})"
+                      if marked else ''))
+
     @command(('lifetime_id', {'type': int,
                               'help': 'ライフタイムID(life で表示)'}),
              ('--clear', {'action': 'store_true', 'help': '解除'}), MEMO)
@@ -366,25 +410,91 @@ class DrugDbShell(Cmd):
                        f" 〜 {end:10} {days:3}日  {row['note'] or ''}")
 
     # ------------------------------------------------------------ report
-    @command(('-s', '--span', {'type': int, 'default': None,
-                               'help': '次回受診までの日数(既定60=2ヶ月)'}),
-             ('-u', '--until', {'type': parse_date, 'default': None,
-                                'help': '次回受診日'}),
+    def visit_dates(self, visit=None, next_visit=None) -> tuple[date, date]:
+        """(visit date, next visit date) from args or session settings
+
+        JP:
+        来院日と次回来院日。引数、無ければ visit・next で設定した値、
+        それも無ければ今日と来院日 + 既定の期間。
+        """
+        visit = visit or self.visit or date.today()
+        kind, value = next_visit or self.next_visit or (
+            'span', get_default_span(self.db))
+        if kind == 'span':
+            value = visit + timedelta(days=value)
+        if value <= visit:
+            raise ValueError(f'次回来院日 {value} は来院日 {visit} より'
+                             '後の日付にしてください')
+        return visit, value
+
+    def print_visit(self):
+        """print visit and next visit dates"""
+        visit, next_visit = self.visit_dates()
+        self.print(f'来院日 {visit}'
+                   + ('' if self.visit else '(今日)'))
+        self.print(f'次回来院日 {next_visit}({(next_visit - visit).days}日後)'
+                   + ('' if self.next_visit else
+                      f'(既定: {span_label(get_default_span(self.db))}後)'))
+
+    @command(('date', {'type': parse_date, 'nargs': '?', 'default': None,
+                       'help': '来院日(省略時は表示のみ)'}),
+             ('-r', '--reset', {'action': 'store_true',
+                                'help': '今日に戻す'}))
+    def do_visit(self, args):
+        """来院日を設定・表示(report の基準日。既定は今日)"""
+        if args.reset:
+            self.visit = None
+        elif args.date:
+            self.visit = args.date
+        self.print_visit()
+
+    @command(('when', {'type': parse_next, 'nargs': '?', 'default': None,
+                       'metavar': '日付|期間',
+                       'help': '次回来院日(例: 11/28)または来院日からの期間'
+                               '(例: 2ヶ月、8週間、60日)。省略時は表示のみ'}),
+             ('-r', '--reset', {'action': 'store_true',
+                                'help': '既定(来院日 + interval の期間)に戻す'}))
+    def do_next(self, args):
+        """次回来院日を設定・表示(既定は来院日 + interval の期間)"""
+        if args.reset:
+            self.next_visit = None
+        elif args.when:
+            self.visit_dates(next_visit=args.when)
+            self.next_visit = args.when
+        self.print_visit()
+
+    @command(('span', {'type': parse_span_arg, 'nargs': '?', 'default': None,
+                       'metavar': '期間',
+                       'help': '例: 2ヶ月、8週間、60日。省略時は表示のみ'}))
+    def do_interval(self, args):
+        """次回来院日の既定(来院日から何日後か)を設定・表示"""
+        if args.span:
+            set_default_span(self.db, args.span)
+        days = get_default_span(self.db)
+        self.print(f'次回来院日の既定: 来院日の{span_label(days)}後({days}日後)')
+
+    @command(('-v', '--visit', {'type': parse_date, 'default': None,
+                                'metavar': 'DATE',
+                                'help': '来院日(省略時は visit の設定、'
+                                        '無ければ今日)'}),
+             ('-n', '--next', {'type': parse_next, 'default': None,
+                               'dest': 'next_visit', 'metavar': '日付|期間',
+                               'help': '次回来院日または来院日からの期間'
+                                       '(省略時は next の設定、無ければ'
+                                       ' interval の期間後)'}),
              ('--margin', {'type': int, 'default': 0,
                            'help': '余裕日数'}),
-             ('--today', {'type': parse_date, 'default': None,
-                          'help': '基準日(省略時今日)'}),
              ('--plain', {'action': 'store_true',
                           'help': 'Markdown ではなくテキスト版で出力'
                                   '(Evernote アプリなど書式なしで貼る先向け)'}),
              ('--ai', {'action': 'store_true',
-                       'help': 'Evernote AI 用(指示 + JSON)で出力'}),
+                       'help': 'チャットAI用(指示 + JSON)で出力'}),
              ('-o', '--output', {'default': None, 'metavar': 'FILE',
                                  'help': 'ファイルにも出力'}))
     def do_report(self, args):
-        """受診前サマリー(次回受診までの必要本数)"""
-        report = make_report(self.db, today=args.today, span=args.span,
-                             next_visit=args.until,
+        """受診前サマリー(来院日から次回来院日までの必要本数)"""
+        visit, next_visit = self.visit_dates(args.visit, args.next_visit)
+        report = make_report(self.db, today=visit, next_visit=next_visit,
                              margin_days=args.margin)
         if args.ai:
             text = to_ai_prompt(report)

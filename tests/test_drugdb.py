@@ -14,7 +14,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -24,7 +24,8 @@ from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.estimate import (estimate_days, last_days, regular_days,
                              requirement)
 from drugdb.import_ods import Cell, import_ods, import_sheet
-from drugdb.report import make_report, to_markdown, to_plain_text
+from drugdb.report import (make_report, need_cell, to_markdown,
+                           to_plain_text)
 from drugdb.rollover import rollover
 
 # 開発用データ(本番のコピー)。非公開なので git 管理外。無ければスキップ
@@ -75,41 +76,49 @@ class TestEstimate(unittest.TestCase):
 
     def test_requirement(self):
         est = estimate_days([life('2024-01-01', '2024-01-31')])  # 30日
-        # 開封10日目: 残20日。60日 - 20日 = 40日 -> 2本。在庫1 -> 1本依頼
+        # 開封10日目: 残20日、在庫1 -> 在庫残日数50。60 - 50 = 10日 -> 1本
         req = requirement(1, est, '2024-06-01', '2024-06-11', 60, spare=0)
-        self.assertEqual((req.remaining, req.need, req.request), (20, 2, 1))
-        # 在庫が十分
+        self.assertEqual((req.remaining, req.short_days, req.need),
+                         (20, 10, 1))
+        # 在庫が十分(足りない日数 -50 -> 0本)
         req = requirement(3, est, '2024-06-01', '2024-06-11', 60, spare=0)
-        self.assertEqual((req.need, req.request), (2, 0))
+        self.assertEqual((req.short_days, req.need), (-50, 0))
         # 開封中なし
         req = requirement(0, est, None, '2024-06-11', 60, spare=0)
-        self.assertEqual((req.need, req.request), (2, 2))
+        self.assertEqual((req.short_days, req.need), (60, 2))
         # 残りだけで足りる
         req = requirement(0, est, '2024-06-10', '2024-06-11', 20, spare=0)
-        self.assertEqual((req.need, req.request), (0, 0))
+        self.assertEqual((req.short_days, req.need), (-9, 0))
 
-    def test_requirement_prescription_limit(self):
+    def test_normal_days_rounding(self):
+        from drugdb.estimate import Estimate
+        # 通常期間は四捨五入(.5 は常に切り上げ)
+        for avg, normal in ((30.5, 31), (31.5, 32), (30 + 1 / 3, 30),
+                            (30 + 2 / 3, 31), (30.49, 30), (0.4, 1)):
+            with self.subTest(avg=avg):
+                req = requirement(0, Estimate(avg, 'recent 2'), None,
+                                  '2024-06-11', 60)
+                self.assertEqual(req.normal, normal)
+
+    def test_requirement_no_prescription_limit(self):
         est = estimate_days([life('2024-01-01', '2024-01-11')])  # 10日
-        # 開封中なし、60日 -> 6本使用 + 予備1 = 7本必要、在庫1 -> 上限3本
-        # 不足は予備を除いた使用分で判定: 6 - 1 - 3 = 2
+        # 1回の処方の上限は設けない(条件が不明なため)
+        # 開封中なし、在庫1 -> 在庫残日数10、足りない日数50 -> 5本 + 予備1
         req = requirement(1, est, None, '2024-06-11', 60)
-        self.assertEqual((req.use, req.need, req.request, req.shortage),
-                         (6, 7, 3, 2))
-        self.assertIn('over prescription limit', req.warnings)
-        # 在庫が3本を超えていても構わない(依頼は0)
+        self.assertEqual((req.short_days, req.need), (50, 6))
+        self.assertEqual(req.warnings, [])
+        # 在庫が多くても構わない(足りない日数 -10 -> -1 + 予備1 = 0本)
         req = requirement(7, est, None, '2024-06-11', 60)
-        self.assertEqual((req.request, req.shortage), (0, 0))
+        self.assertEqual((req.short_days, req.need), (-10, 0))
 
     def test_requirement_spare(self):
         est = estimate_days([life('2024-01-01', '2024-01-31')])  # 30日
-        # 残20日、60日 -> 使用2本 + 予備1 = 3本、在庫1 -> 依頼2
+        # 残20日、在庫1 -> 足りない日数10 -> 1本 + 予備1 = 2本
         req = requirement(1, est, '2024-06-01', '2024-06-11', 60)
-        self.assertEqual((req.use, req.spare, req.need, req.request),
-                         (2, 1, 3, 2))
-        # 予備が上限で削られるだけなら不足・警告にしない
+        self.assertEqual(req.need, 2)
+        # 開封中なし、在庫0、90日 -> 3本 + 予備1 = 4本
         req = requirement(0, est, None, '2024-06-11', 90)
-        self.assertEqual((req.use, req.need, req.request, req.shortage),
-                         (3, 4, 3, 0))
+        self.assertEqual(req.need, 4)
         self.assertEqual(req.warnings, [])
 
     def test_requirement_warnings(self):
@@ -120,7 +129,7 @@ class TestEstimate(unittest.TestCase):
         # 廃棄期限・推定超過は info のみ
         self.assertEqual(set(req.info), {'over max_days', 'over estimate'})
         self.assertEqual(req.remaining, 0)
-        self.assertEqual(req.request, 2)
+        self.assertEqual(req.need, 2)
 
     def test_max_days_does_not_cap_estimate(self):
         # キサラタン: 廃棄期限28日でも実績32日ならそのまま32日で推定
@@ -135,7 +144,6 @@ class TestEstimate(unittest.TestCase):
         est = estimate_days([life('2024-01-01', '2024-03-01')])
         req = requirement(2, est, None, '2024-06-11', 60, as_needed=True)
         self.assertIsNone(req.need)
-        self.assertIsNone(req.request)
         self.assertEqual(req.estimate.days, 60)
 
 
@@ -377,7 +385,7 @@ class TestDrugDb(DbTestCase):
         self.db.close()
         self.db = DrugDb(str(self.path / 'test.db'))
         self.assertEqual(len(self.db.list_drugs()), 1)
-        self.assertEqual(self.db.get_meta('schema_version'), '5')
+        self.assertEqual(self.db.get_meta('schema_version'), '6')
 
     def test_migrate_add_as_needed(self):
         path = str(self.path / 'old.db')
@@ -418,25 +426,187 @@ class TestReport(DbTestCase):
         self.assertEqual(report.next_visit, date(2024, 8, 10))
         self.assertEqual([line.name for line in report.lines], ['A', 'B'])
         req = report.lines[0].req
-        self.assertEqual((req.stock, req.need, req.request), (1, 3, 2))
+        self.assertEqual((req.stock, req.need), (1, 2))
+        # 根拠: 通常期間30日、6/1開封・来院日で10日経過、次回来院日まで60日
+        # 開封分残日数 = 30 - (6/11 - 6/1 = 10) = 20
+        # 在庫残日数 = 20 + 1 * 30 = 50
+        # 足りない日数 = 60 - 50 = 10
+        # 必要本数 = ceil(10 / 30) + 予備1 = 2
+        self.assertEqual((req.normal, req.opened_left, req.stock_days,
+                          req.short_days), (30, 20, 50, 10))
         text = to_markdown(report)
-        self.assertTrue(text.startswith('# 目薬 受診前サマリー 2024-06-11\n'))
-        # 次回受診予定・お願い・詳細は無し
-        self.assertNotIn('次回受診予定', text)
-        self.assertNotIn('## お願い', text)
-        self.assertNotIn('## 詳細', text)
+        self.assertTrue(text.startswith(
+            '# 目薬 受診前サマリー\n\n- 来院日 2024-06-11\n'
+            '- 次回来院日 2024-08-10(60日後)\n'))
+        # 期間パターンの表示は無し
+        self.assertNotIn('2ヶ月', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
-        # 次回来院までに必要な本数: 2ヶ月/1ヶ月(4週間)/2週間。10日経過・残20日・30日/本
-        self.assertEqual([r.need for r in report.lines[0].patterns],
-                         [3, 2, 1])
-        # 処方不要は空欄、必要なら「必要N」(N は依頼数)
-        self.assertIn('| A(A-generic) | 1 | 必要2 | 必要1 |  |', text)
-        self.assertIn('| 代表目薬名(目薬名) | 未開封 | 2ヶ月(通常)'
-                      ' | 1ヶ月(4週間) | 2週間 |', text)
+        self.assertIn('| 代表目薬名(目薬名) | 必要本数 | 足りない日数'
+                      ' | 在庫残日数 | 未開封 | 通常期間 | 開封分残日数 |', text)
+        self.assertIn('| A(A-generic) | 2 | 10 | 50 | 1 | 30 | 20 |', text)
         self.assertIn('| 代表目薬名 | 未開封個数 |', text)
-        self.assertIn('| B | 2 | 相談 | 相談 | 相談 |', text)
+        self.assertIn('| B | 相談 |  |  | 2 |  |  |', text)
+        self.assertIn('- A(A-generic): 通常期間 30日 (直近3本の平均', text)
         self.assertLess(text.index('## 次回来院までに必要な本数'),
                         text.index('## 目薬在庫'))
+
+    def test_required_count_basis(self):
+        from drugdb.estimate import Estimate, requirement
+        est = Estimate(30.4, 'recent 3', [30, 30, 31])
+        # 6/1開封・6/11来院 -> 開封分残日数20、在庫1本で在庫残日数50
+        req = requirement(1, est, '2024-06-01', '2024-06-11', span=10)
+        self.assertEqual((req.opened_left, req.stock_days, req.short_days,
+                          req.need), (20, 50, -40, 0))
+        # 足りない日数が -29〜0 なら予備の1本
+        req = requirement(1, est, '2024-06-01', '2024-06-11', span=20)
+        self.assertEqual((req.short_days, req.need), (-30, 0))
+        req = requirement(1, est, '2024-06-01', '2024-06-11', span=21)
+        self.assertEqual((req.short_days, req.need), (-29, 1))
+        req = requirement(1, est, '2024-06-01', '2024-06-11', span=50)
+        self.assertEqual((req.short_days, req.need), (0, 1))
+        # 足りない日数 1〜30 なら 1 + 予備1
+        req = requirement(1, est, '2024-06-01', '2024-06-11', span=51)
+        self.assertEqual((req.short_days, req.need), (1, 2))
+        # 来院日で通常期間を超えて使っている1本は残り0日
+        req = requirement(0, est, '2024-05-01', '2024-06-11', span=30)
+        self.assertEqual((req.remaining, req.opened_left, req.stock_days,
+                          req.short_days, req.need), (0, 0, 0, 30, 2))
+        # 開封中が無ければ開封分残日数0
+        req = requirement(0, est, None, '2024-06-11', span=60)
+        self.assertEqual((req.opened_left, req.short_days, req.need),
+                         (0, 60, 3))
+        # 随時使用は根拠を出さない
+        req = requirement(1, est, None, '2024-06-11', span=60,
+                          as_needed=True)
+        self.assertIsNone(req.stock_days)
+
+    def test_required_count_by_history(self):
+        """required count by number of finished bottles (0 to 3, and 4)
+
+        JP:
+        使い切った実績の件数ごとの必要本数。未開封0本、来院日は最後の開封の
+        10日後、次回来院日は60日後。
+        """
+        cases = [
+            # (使い切り日数, 通常期間, 開封分残日数, 足りない日数, 必要本数)
+            ([], None, None, None, '相談'),                # 実績なし
+            ([30], 30, 20, 40, '3'),                       # 1本: 30
+            ([30, 28], 29, 19, 41, '3'),                   # 2本: (30+28)/2
+            ([30, 28, 32], 30, 20, 40, '3'),               # 3本: (30+28+32)/3
+            ([30, 28, 32, 36], 32, 22, 38, '3'),           # 直近3本: 28,32,36
+            ([60, 60, 60], 60, 50, 10, '2'),               # 1本分 + 予備1
+            ([90, 90, 90], 90, 80, -20, '1'),              # 足りるので予備1だけ
+            ([150, 150, 150], 150, 140, -80, '1'),         # 同上(-80/150→0)
+        ]
+        for days, normal, opened_left, short, need in cases:
+            with self.subTest(days=days):
+                db = DrugDb(':memory:')
+                db.add_drug('X', '2024-01-01')
+                db.receive('X', len(days) + 1, '2024-01-01')
+                opened = date(2024, 1, 1)
+                db.open_bottle('X', opened)
+                for length in days:
+                    opened += timedelta(days=length)
+                    db.open_bottle('X', opened)
+                visit = opened + timedelta(days=10)
+                report = make_report(db, today=visit, span=60)
+                req = report.lines[0].req
+                self.assertEqual(req.estimate.samples, days[-3:])
+                self.assertEqual((req.normal, req.opened_left, req.short_days),
+                                 (normal, opened_left, short))
+                self.assertEqual(need_cell(req), need)
+                if normal is not None:
+                    # 在庫残日数 = 開封分残日数(未開封0本)
+                    self.assertEqual(req.stock_days, opened_left)
+                    self.assertIn(f'通常期間 {normal}日 (直近'
+                                  f'{len(days[-3:])}本の平均', to_markdown(report))
+                db.close()
+
+    def test_change_pattern(self):
+        """eye drop pattern change excludes earlier lifetimes
+
+        JP:
+        点眼パターン変更: 変更日より前の開封分(開封中を含む)をイレギュラーにし、
+        メモに「点眼パターン変更」を追記。以後は変更後の実績だけで推定する。
+        """
+        self.db.add_drug('X', '2024-01-01')
+        self.db.receive('X', 6, '2024-01-01')
+        for day in ('2024-01-01', '2024-01-31', '2024-03-01', '2024-03-31'):
+            self.db.open_bottle('X', day)
+        lives = self.db.lifetimes('X')
+        self.db.set_irregular(lives[1]['lifetime_id'], note='紛失')
+        self.db.set_irregular(lives[1]['lifetime_id'], False)
+        self.db.set_irregular(lives[0]['lifetime_id'], note='途中廃棄')
+        # 4/10 に1日2回→1回に変更(開封中の 3/31 の1本も対象)
+        marked = self.db.change_pattern('X', '2024-04-10', '1日2回→1回')
+        self.assertEqual(marked, [r['lifetime_id'] for r in lives[1:]])
+        lives = self.db.lifetimes('X')
+        self.assertTrue(all(r['irregular'] for r in lives))
+        # 既にイレギュラーだったものはメモもそのまま
+        self.assertEqual(lives[0]['note'], '途中廃棄')
+        self.assertEqual(lives[1]['note'],
+                         '紛失 / 点眼パターン変更(2024-04-10) 1日2回→1回')
+        self.assertEqual(lives[3]['note'],
+                         '点眼パターン変更(2024-04-10) 1日2回→1回')
+        self.assertEqual(self.db.find_drug('X')['pattern_date'], '2024-04-10')
+        # 変更後の実績が無いので推定できず「相談」
+        report = make_report(self.db, today='2024-04-11', span=60)
+        self.assertEqual(need_cell(report.lines[0].req), '相談')
+        # 変更後の1本を使い切ると、その1本だけで推定する
+        self.db.open_bottle('X', '2024-04-10')
+        self.db.open_bottle('X', '2024-06-09')
+        est = self.db.estimate('X')
+        self.assertEqual((est.days, est.samples), (60, [60]))
+
+    def test_change_pattern_ignores_older_summaries(self):
+        self.db.add_drug('X', '2020-01-01')
+        self.db.conn.execute(
+            "INSERT INTO lifetime_summary VALUES (1, 2023, 10, 30, 28, 32)")
+        self.db.conn.execute(
+            "INSERT INTO lifetime_summary VALUES (1, 2024, 3, 60, 58, 62)")
+        self.assertEqual(self.db.estimate('X').days, (300 + 180) / 13)
+        self.db.change_pattern('X', '2024-01-20')
+        est = self.db.estimate('X')
+        self.assertEqual((est.days, est.basis), (60, 'past years'))
+        self.db.change_pattern('X', '2025-01-20')
+        self.assertEqual(self.db.estimate('X').basis, 'no data')
+
+    def test_cli_pattern(self):
+        out = io.StringIO()
+        shell = DrugDbShell(self.db, stdout=out)
+        for line in ('add X', 'in X 2 -d 2024-01-01',
+                     'open X -d 2024-01-01', 'open X -d 2024-01-31',
+                     'pattern X -d 2024-02-10 -m 両眼に変更', 'show X',
+                     'life X'):
+            shell.onecmd(line)
+        text = out.getvalue()
+        self.assertIn('点眼パターン変更: 2件をイレギュラーにしました'
+                      '(ライフタイム 1, 2)', text)
+        self.assertIn('点眼パターン変更 2024-02-10', text)
+        self.assertIn('*2024-01-31', text)
+        self.assertIn('点眼パターン変更(2024-02-10) 両眼に変更', text)
+
+    def test_required_count_new_drug(self):
+        """new drug without any stock or lifetime records
+
+        JP:
+        目薬を追加しただけ(入庫・開封の記録が全く無い)なら推定できず「相談」。
+        """
+        self.db.add_drug('X', '2024-01-01')
+        report = make_report(self.db, today='2024-06-11', span=60)
+        req = report.lines[0].req
+        self.assertEqual((req.stock, req.opened, req.normal, req.need),
+                         (0, None, None, None))
+        self.assertEqual(need_cell(req), '相談')
+        text = to_markdown(report)
+        self.assertIn('| X | 相談 |  |  | 0 |  |  |', text)
+        self.assertIn('- X: 通常期間 - (実績なし)', text)
+
+    def test_report_next_visit_error(self):
+        make_sample(self.db)
+        for bad in ('2024-06-11', '2024-06-01'):
+            with self.assertRaises(ValueError):
+                make_report(self.db, today='2024-06-11', next_visit=bad)
 
     def test_plain_text(self):
         make_sample(self.db)
@@ -444,13 +614,14 @@ class TestReport(DbTestCase):
         self.db.receive('D', 2, '2024-01-01')
         text = to_plain_text(make_report(self.db, today='2024-06-11',
                                          name_mode='representative'))
-        self.assertIn('■ 次回来院までに必要な本数(2ヶ月 / 1ヶ月 / 2週間)', text)
-        # 10日経過・残20日・30日/本・在庫1
-        self.assertIn('A  未開封1  2ヶ月:必要2  1ヶ月:必要1  2週間:不要', text)
-        self.assertIn('D  未開封2  随時使用', text)
+        self.assertTrue(text.startswith(
+            '目薬 受診前サマリー\n来院日 2024-06-11\n'
+            '次回来院日 2024-08-10(60日後)\n'))
+        self.assertIn('A  必要本数2  足りない日数10  在庫残日数50  未開封1'
+                      '  通常期間30  開封分残日数20', text)
+        self.assertIn('B  必要本数相談  未開封2', text)
+        self.assertIn('D  必要本数随時  未開封2', text)
         self.assertIn('A  未開封1  開封日6/1  残日数20  通常日数31', text)
-        self.assertNotIn('次回受診予定', text)
-        self.assertNotIn('■ お願い', text)
         self.assertNotIn('|', text)
         self.assertNotIn('#', text)
 
@@ -461,17 +632,18 @@ class TestReport(DbTestCase):
         self.db.add_drug('D', as_needed=True)
         report = make_report(self.db, today='2024-06-11')
         data = to_ai_data(report)
-        self.assertEqual(data['基準日'], '2024-06-11')
+        self.assertEqual((data['来院日'], data['次回来院日']),
+                         ('2024-06-11', '2024-08-10'))
         a, b, d = data['目薬']
         self.assertEqual((a['代表目薬名'], a['目薬名'], a['未開封']),
                          ('A', 'A-generic', 1))
         self.assertEqual(a['推定残日数'], 20)
-        self.assertEqual(a['処方依頼本数'],
-                         {'2ヶ月(通常)': 2, '1ヶ月(4週間)': 1, '2週間': 0})
-        self.assertEqual(b['処方依頼本数']['2週間'], '相談')
-        self.assertEqual(d['処方依頼本数']['2週間'], '随時')
+        self.assertEqual((a['必要本数'], a['足りない日数'], a['在庫残日数'],
+                          a['通常期間'], a['開封分残日数']), (2, 10, 50, 30, 20))
+        self.assertEqual(b['必要本数'], '相談')
+        self.assertEqual(d['必要本数'], '随時')
         text = to_ai_prompt(report)
-        self.assertIn('目薬 受診前サマリー 2024-06-11', text)
+        self.assertIn('(2024-06-11 / 2024-08-10)', text)
         body = text.split('```json')[1].split('```')[0]
         self.assertEqual(json.loads(body), data)
         # 注意は日本語の文(内部コードを出さない)
@@ -480,62 +652,54 @@ class TestReport(DbTestCase):
         self.assertTrue(any('廃棄期限' in n for n in notes))
 
     def test_spans(self):
-        from drugdb.report import (DEFAULT_SPANS, default_sub_spans, get_spans,
-                                   parse_spans, set_spans, span_label)
-        self.assertEqual(get_spans(self.db), DEFAULT_SPANS)
+        from drugdb.report import (DEFAULT_SPAN, get_default_span, parse_span,
+                                   set_default_span, span_label, span_to_unit,
+                                   unit_to_span)
+        self.assertEqual(get_default_span(self.db), DEFAULT_SPAN)
         self.assertEqual([span_label(d) for d in (60, 28, 14, 30, 15, 56)],
-                         ['2ヶ月', '1ヶ月(4週間)', '2週間', '1ヶ月', '15日',
-                          '8週間'])
-        self.assertEqual(span_label(60, normal=True), '2ヶ月(通常)')
-        self.assertEqual(span_label(28, 'short'), '1ヶ月\n(4週間)')
-        self.assertEqual(default_sub_spans(60), (60, 30, 14))
-        self.assertEqual(default_sub_spans(90), (90, 42, 21))
-        self.assertEqual(default_sub_spans(28), (28, 14, 7))
-        from drugdb.report import snap_span, span_to_unit, unit_to_span
+                         ['2ヶ月', '4週間', '2週間', '1ヶ月', '15日', '8週間'])
         self.assertEqual([span_to_unit(d) for d in (60, 28, 14, 30, 10)],
                          [(2, 'ヶ月'), (4, '週間'), (2, '週間'), (1, 'ヶ月'),
                           (10, '日')])
         self.assertEqual(unit_to_span(2, 'ヶ月'), 60)
         self.assertEqual(unit_to_span('3', '週間'), 21)
         self.assertEqual(unit_to_span(10, '日'), 10)
-        for bad in ((0, '週間'), ('x', '週間'), (1, '年')):
+        for bad in ((0, '週間'), ('x', '週間'), (1, '年'), (13, 'ヶ月')):
             with self.assertRaises(ValueError):
                 unit_to_span(*bad)
-        self.assertEqual(snap_span(15), 14)
-        self.assertEqual(snap_span(31), 30)
-        self.assertEqual(snap_span(3), 3)
-        self.assertEqual(parse_spans('90, 45,22'), (90, 45, 22))
-        for bad in ('', 'a', '0', '400', '30,30'):
+        self.assertEqual([parse_span(t) for t in
+                          ('2ヶ月', '2か月', '8週間', '8週', '60日', '60',
+                           ' 3 ヶ月 ')], [60, 60, 56, 56, 60, 60, 90])
+        for bad in ('', 'a', '0', '400', '2年', '1.5ヶ月'):
             with self.assertRaises(ValueError):
-                parse_spans(bad)
-        # 設定した期間で計算・表示する
+                parse_span(bad)
+        # 以前の3つの期間の保存形式(先頭が通常)も読める
+        self.db.set_meta('spans', '90,45,22')
+        self.assertEqual(get_default_span(self.db), 90)
+        self.db.set_meta('spans', 'x')
+        self.assertEqual(get_default_span(self.db), DEFAULT_SPAN)
+        with self.assertRaises(ValueError):
+            set_default_span(self.db, 0)
+        # 設定した期間で次回来院日を決める
         make_sample(self.db)
-        set_spans(self.db, (90, 45, 21))
+        set_default_span(self.db, 90)
         report = make_report(self.db, today='2024-06-11')
-        self.assertEqual(report.spans, (90, 45, 21))
-        self.assertEqual(report.span, 90)          # お願いは通常の期間
-        self.assertEqual(len(report.lines[0].patterns), 3)
-        text = to_markdown(report)
-        self.assertIn('| 3ヶ月(通常) | 45日 | 3週間 |', text)
-        self.assertIn('■ 次回来院までに必要な本数(3ヶ月 / 45日 / 3週間)',
-                      to_plain_text(report))
-        from drugdb.ai_export import to_ai_data, to_ai_prompt
-        self.assertIn('3ヶ月(通常) / 45日 / 3週間', to_ai_prompt(report))
-        self.assertEqual(list(to_ai_data(report)['目薬'][0]['処方依頼本数']),
-                         ['3ヶ月(通常)', '45日', '3週間'])
+        self.assertEqual((report.span, report.next_visit),
+                         (90, date(2024, 9, 9)))
+        self.assertIn('- 次回来院日 2024-09-09(90日後)', to_markdown(report))
 
     def test_report_name_mode(self):
         make_sample(self.db)
         both = to_markdown(make_report(self.db, today='2024-06-11'))
-        self.assertIn('| A(A-generic) | 1 |', both)
+        self.assertIn('| A(A-generic) | 2 |', both)
         rep = to_markdown(make_report(self.db, today='2024-06-11',
                                       name_mode='representative'))
-        self.assertIn('| 代表目薬名 | 未開封 |', rep)
+        self.assertIn('| 代表目薬名 | 必要本数 |', rep)
         self.assertNotIn('A-generic', rep)
         act = to_markdown(make_report(self.db, today='2024-06-11',
                                       name_mode='actual'))
-        self.assertIn('| 目薬名 | 未開封 |', act)
-        self.assertIn('- A-generic: 1本あたり推定', act)
+        self.assertIn('| 目薬名 | 必要本数 |', act)
+        self.assertIn('- A-generic: 通常期間', act)
         with self.assertRaises(ValueError):
             make_report(self.db, name_mode='bad')
 
@@ -552,7 +716,7 @@ class TestReport(DbTestCase):
         self.assertIn('| A | 1 | 6/1 | 34 | 超過4日 | 31 |', table)
         self.assertIn('| B | 2 |  |  |  |  |', table)
         self.assertNotIn('ヒアレイン', table)
-        self.assertIn('| ヒアレイン | 2 | 随時 | 随時 | 随時 |', text)
+        self.assertIn('| ヒアレイン | 随時 |  |  | 2 |  |  |', text)
         self.assertIn('- [info] A(A-generic): 開封から34日経過。'
                       '廃棄期限(4週間)を過ぎています', text)
         self.assertNotIn('[警告]', text)
@@ -564,14 +728,15 @@ class TestReport(DbTestCase):
         self.assertIn(' 推定残り約20日', opened_text(req))
         self.assertIn(' 残り約20日', opened_text(req, '残り'))
 
-    def test_report_prescription_limit(self):
+    def test_report_no_prescription_limit(self):
         self.db.add_drug('A')
         self.db.add_lifetime('A', '2024-01-01', '2024-01-11')  # 10日/本
         report = make_report(self.db, today='2024-06-11', span=60)
         text = to_markdown(report)
-        self.assertIn('| A | 0 | 必要3(不足3) | 必要3 | 必要3 |', text)
-        self.assertIn('[警告] A: 処方上限3本では次回受診までに3本不足します',
-                      text)
+        # 上限なし: 60 / 10 = 6本 + 予備1
+        self.assertIn('| A | 7 | 60 | 0 | 0 | 10 | 0 |', text)
+        self.assertNotIn('[警告]', text)
+        self.assertNotIn('不足', text)
 
     def test_report_until(self):
         make_sample(self.db)
@@ -582,7 +747,7 @@ class TestReport(DbTestCase):
     def test_markdown_table_escape(self):
         self.db.add_drug('A|B')
         text = to_markdown(make_report(self.db, today='2024-06-11'))
-        self.assertIn('| A\\|B | 0 |', text)
+        self.assertIn('| A\\|B | 相談 |  |  | 0 |', text)
 
 
 class TestRollover(DbTestCase):
@@ -714,14 +879,49 @@ class TestCli(DbTestCase):
         self.assertIn('在庫: 1', out)
         out = self.run_cmd('life A')[0]
         self.assertIn('2024-01-01 〜 2024-01-31  30日', out)
-        out = self.run_cmd('report --today 2024-02-10 -s 60')[0]
+        out = self.run_cmd('report -v 2024-02-10 -n 60')[0]
         self.assertIn('## 次回来院までに必要な本数', out)
-        self.assertNotIn('次回受診予定', out)
-        self.assertNotIn('## お願い', out)
-        self.assertNotIn('## 詳細', out)
-        out = self.run_cmd('report --today 2024-02-10 --plain')[0]
+        self.assertIn('- 来院日 2024-02-10', out)
+        self.assertIn('- 次回来院日 2024-04-10(60日後)', out)
+        out = self.run_cmd('report --visit 2024-02-10 --next 2024-03-09'
+                           ' --plain')[0]
+        self.assertIn('次回来院日 2024-03-09(28日後)', out)
         self.assertIn('■ 次回来院までに必要な本数', out)
         self.assertNotIn('| ', out)
+        out, err, failed = self.run_cmd('report -v 2024-02-10 -n 2024-02-01')
+        self.assertTrue(failed)
+        self.assertIn('来院日 2024-02-10 より後の日付', err)
+        self.assertTrue(self.run_cmd('report -n 2年')[2])
+
+    def test_visit_next_interval(self):
+        out = io.StringIO()
+        shell = DrugDbShell(self.db, stdout=out)
+
+        def run(line):
+            out.seek(0)
+            out.truncate()
+            with redirect_stderr(io.StringIO()) as err:
+                shell.onecmd(line)
+            return out.getvalue() + err.getvalue()
+
+        today = date.today()
+        self.assertIn(f'来院日 {today}(今日)', run('visit'))
+        self.assertIn('(既定: 2ヶ月後)', run('next'))
+        text = run('visit 2024-02-10')
+        self.assertIn('来院日 2024-02-10\n', text)
+        self.assertIn('次回来院日 2024-04-10(60日後)(既定: 2ヶ月後)', text)
+        self.assertIn('次回来院日 2024-03-09(28日後)\n', run('next 4週間'))
+        self.assertIn('次回来院日 2024-03-01(20日後)', run('next 2024-03-01'))
+        self.assertIn('より後の日付', run('next 2024-02-01'))
+        self.assertIn('2024-03-01', run('next'))        # 変わらない
+        # report は visit・next の設定を使う(引数があればそちら)
+        self.assertIn('- 次回来院日 2024-03-01(20日後)', run('report'))
+        self.assertIn('- 来院日 2024-02-20', run('report -v 2024-02-20'))
+        self.assertIn('次回来院日の既定: 来院日の8週間後(56日後)',
+                      run('interval 8週間'))
+        self.assertIn('次回来院日 2024-04-06(56日後)(既定: 8週間後)',
+                      run('next -r'))
+        self.assertIn(f'来院日 {today}(今日)', run('visit -r'))
 
     def test_endname(self):
         self.run_cmd('add ヒアレイン')

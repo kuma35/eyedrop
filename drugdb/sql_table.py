@@ -21,6 +21,9 @@ drug
 - default_days: 実績が無いときの想定使用日数。
 - as_needed: 随時使用(毎日使うものではない。例: ヒアレイン)なら 1。
   必要本数を計算せず、推定使用日数は参考表示のみ。
+- pattern_date: 点眼パターン(1日の点眼回数など)を変更した日。NULL なら変更なし。
+  この日より前に開封した分はイレギュラーにし、この年より前の過去年値
+  (lifetime_summary)も推定に使わない。
 
 drug_alias
 ----------
@@ -65,7 +68,7 @@ drug_note
 「両眼再開」「手術後左眼中止」など、日付付きのメモ。
 """
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 DRUG = """
 CREATE TABLE IF NOT EXISTS drug (
@@ -76,7 +79,8 @@ CREATE TABLE IF NOT EXISTS drug (
     max_days INTEGER,            -- 開封後の廃棄期限日数 例:28
     default_days INTEGER,        -- 実績が無いときの想定使用日数
     note TEXT,
-    as_needed INTEGER NOT NULL DEFAULT 0  -- 随時使用
+    as_needed INTEGER NOT NULL DEFAULT 0,  -- 随時使用
+    pattern_date TEXT            -- 点眼パターン変更日
 );
 """
 
@@ -151,7 +155,8 @@ CREATE INDEX IF NOT EXISTS lifetime_drug_start
 
 # 旧バージョンで作成済のテーブルに追加する列 {テーブル名: [(列名, 定義)]}
 ADD_COLUMNS = {
-    'drug': [('as_needed', 'INTEGER NOT NULL DEFAULT 0')],
+    'drug': [('as_needed', 'INTEGER NOT NULL DEFAULT 0'),
+             ('pattern_date', 'TEXT')],
     'drug_alias': [('end_date', 'TEXT')],
     'lifetime': [('out_stock_id', 'INTEGER'),
                  ('prev_lifetime_id', 'INTEGER')],

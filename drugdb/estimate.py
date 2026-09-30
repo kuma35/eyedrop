@@ -18,13 +18,19 @@ DB に依存しない計算ロジック。
 必要本数
 --------
 
-次回受診までの日数 span のうち、開封中の分の推定残日数で賄えない日数を
-推定使用日数で割って切り上げたものが必要本数。
-必要本数から未開封在庫数を引いたものが依頼数。
-必要本数には予備 SPARE_BOTTLES(1本程度の余裕)を含める。
-依頼数は1回の処方の上限 MAX_PRESCRIPTION(3本)を超えない。
-予備を除いた使用分だけで上限を超える分を不足数(shortage)とし、警告を出す
-(予備が上限で削られるだけなら警告しない)。在庫が3本を超えるのは構わない。
+推定使用日数は整数日に四捨五入して通常期間とし、以下すべてこの値で計算する
+(サマリーに出す根拠の数字でそのまま検算できるように)。
+
+来院日の時点で
+
+- 開封分残日数 = 通常期間 - (来院日 - 開封日)
+  (既に通常期間を超えて使っている1本は 0。開封中が無ければ 0)
+- 在庫残日数 = 開封分残日数 + 未開封本数 * 通常期間
+- 足りない日数 = 次回来院日までの日数(span) - 在庫残日数
+- 必要本数 = 足りない日数 / 通常期間 を切り上げ + 予備(0未満は0)
+
+必要本数は処方をお願いする本数で、予備 SPARE_BOTTLES(1本程度の余裕)を含める。
+1回の処方の上限本数は条件が不明なので設けない(医師に確認できたら改めて実装)。
 
 随時使用(as_needed)の薬は毎日使うものではないので必要本数を計算しない。
 推定使用日数は参考値として表示するだけ。
@@ -38,8 +44,6 @@ from statistics import median
 from typing import Iterable, Optional, Sequence
 
 DEFAULT_WINDOW = 3
-# 1回の処方で出してもらえる最大本数(健康保険による制限。絶対)
-MAX_PRESCRIPTION = 3
 # 必要本数に加える予備(余裕)の本数
 SPARE_BOTTLES = 1
 DEFAULT_SHORT_RATIO = 0.7
@@ -174,12 +178,12 @@ class Requirement:
     estimate: Estimate
     opened: Optional[date] = None    # 開封中の開封日
     elapsed: Optional[int] = None    # 開封からの経過日数
-    remaining: Optional[float] = None  # 開封中の推定残日数
-    need: Optional[int] = None       # 必要本数(予備を含む)
-    use: Optional[int] = None        # 期間中に使う本数(予備を含まない)
-    spare: int = 0                   # 予備の本数
-    request: Optional[int] = None    # 依頼数(処方上限まで)
-    shortage: int = 0                # 処方上限を超えて足りない本数
+    remaining: Optional[int] = None  # 開封中の推定残日数(来院日時点)
+    normal: Optional[int] = None     # 通常期間(1本の推定日数を丸めたもの)
+    opened_left: Optional[int] = None  # 開封分残日数(来院日時点。開封中なしは0)
+    stock_days: Optional[int] = None   # 在庫残日数(来院日時点)
+    short_days: Optional[int] = None   # 足りない日数(span - 在庫残日数)
+    need: Optional[int] = None       # 必要本数(処方をお願いする本数。予備を含む)
     max_days: Optional[int] = None   # 廃棄期限日数
     as_needed: bool = False          # 随時使用
     warnings: list[str] = field(default_factory=list)  # 警告
@@ -194,33 +198,31 @@ def requirement(stock: int, est: Estimate, opened, today, span: int,
     """calculate required bottles until next visit
 
     JP:
-    次回受診(today + span 日)までに必要な本数と依頼数を計算する。
+    次回来院日(来院日 today + span 日)までに必要な本数を計算する。
     opened は開封中のライフタイムの開封日(無ければ None)。
     margin_days は受診が遅れた時などのための余裕日数。
-    as_needed(随時使用)なら必要本数・依頼数は None のまま。
+    as_needed(随時使用)なら必要本数は None のまま。
     """
     today = to_date(today)
     req = Requirement(stock=stock, estimate=est, opened=to_date(opened),
                       max_days=max_days, as_needed=as_needed)
     if stock < 0:
         req.warnings.append('stock negative')
+    if est.days is not None:
+        # 四捨五入(round() は .5 を偶数に丸めるので使わない)
+        req.normal = max(1, math.floor(est.days + 0.5))
     if req.opened is not None:
         req.elapsed = (today - req.opened).days
         if max_days and req.elapsed > max_days:
             req.info.append('over max_days')
-        if est.days is not None:
-            req.remaining = max(0.0, est.days - req.elapsed)
-            if req.elapsed > est.days:
+        if req.normal is not None:
+            req.remaining = max(0, req.normal - req.elapsed)
+            if req.elapsed > req.normal:
                 req.info.append('over estimate')
-    if est.days is None or as_needed:
+    if req.normal is None or as_needed:
         return req
-    cover = span + margin_days - (req.remaining or 0.0)
-    req.use = max(0, math.ceil(cover / est.days)) if cover > 0 else 0
-    req.spare = spare
-    req.need = req.use + spare
-    stock = max(stock, 0)
-    req.request = min(max(0, req.need - stock), MAX_PRESCRIPTION)
-    req.shortage = max(0, req.use - stock - MAX_PRESCRIPTION)
-    if req.shortage:
-        req.warnings.append('over prescription limit')
+    req.opened_left = req.remaining or 0
+    req.stock_days = req.opened_left + max(stock, 0) * req.normal
+    req.short_days = span + margin_days - req.stock_days
+    req.need = max(0, math.ceil(req.short_days / req.normal) + spare)
     return req

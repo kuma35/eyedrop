@@ -5,14 +5,18 @@ JP:
 眼科受診直前に提出するサマリーを作ります。
 出力は Markdown 形式です。端末表示、 Evernote Web へのコピペ、
 MCP 連携でのノート作成のいずれにもそのまま使えます。
+
+来院日(既定は今日)から次回来院日(既定は来院日 + 設定の期間)までに
+必要な本数を、根拠(足りない日数・在庫残日数・未開封・通常期間・開封分残日数)と
+一緒に出します。
 """
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
 from .drugdb import DrugDb
-from .estimate import (MAX_PRESCRIPTION, SPARE_BOTTLES, Requirement,
-                       last_days, to_date)
+from .estimate import SPARE_BOTTLES, Requirement, last_days, to_date
 
 WARNING_TEXT = {
     'stock negative': '在庫数がマイナスです。棚卸ししてください',
@@ -26,16 +30,18 @@ NAME_MODES = ('both', 'representative', 'actual')
 NAME_HEAD = {'both': '代表目薬名(目薬名)', 'representative': '代表目薬名',
              'actual': '目薬名'}
 
-# 次回来院までに必要な本数申告の期間(日数)。毎回すべて推定する。
-# 通常は2ヶ月。病状により2週間と1ヶ月(4週間)。
-# 表の列の順(通常を未開封のすぐ隣にするため先頭が通常)。
-# DB の meta 'spans' に「60,28,14」の形で保存でき、変更できる(get_spans)
-DEFAULT_SPANS = (60, 28, 14)
-DEFAULT_SPAN = DEFAULT_SPANS[0]
+# 次回来院日の既定 = 来院日 + この日数(通常は2ヶ月)。
+# DB の meta 'spans' に保存でき、変更できる(get_default_span)。
+# 以前は「60,28,14」の形で3つ保存していたので、先頭の値を使う
+DEFAULT_SPAN = 60
 MAX_SPAN_DAYS = 365
 # 期間の単位(次回診察日は月単位・週単位で決まるので単位で指定する)。
 # 1ヶ月は30日、1週間は7日として日数に換算する(1本程度の余裕を見て計算するので十分)
 SPAN_UNITS = {'ヶ月': 30, '週間': 7, '日': 1}
+# 入力で受け付ける単位の書き方
+_UNIT_ALIASES = {'ヶ月': 'ヶ月', 'か月': 'ヶ月', 'カ月': 'ヶ月', 'ケ月': 'ヶ月',
+                 '箇月': 'ヶ月', '月': 'ヶ月', '週間': '週間', '週': '週間',
+                 '日': '日', '': '日'}
 
 
 def span_to_unit(days: int) -> tuple[int, str]:
@@ -56,7 +62,7 @@ def unit_to_span(number, unit: str) -> int:
     """(number, unit) to days
 
     JP:
-    (数, 単位) を日数にする。
+    (数, 単位) を日数にする。1〜MAX_SPAN_DAYS 日。
     """
     if unit not in SPAN_UNITS:
         raise ValueError(f'単位が不正です: {unit}')
@@ -66,103 +72,61 @@ def unit_to_span(number, unit: str) -> int:
         raise ValueError(f'期間は数字で指定してください: {number}') from err
     if number < 1:
         raise ValueError('期間は1以上にしてください')
-    return number * SPAN_UNITS[unit]
-
-
-def snap_span(days: float) -> int:
-    """round days to a natural unit (months or weeks)
-
-    JP:
-    日数をきりのよい単位に丸める。1ヶ月前後以上は月、1週以上は週、それ未満は日。
-    例: 30→30(1ヶ月)、15→14(2週)、45→42(6週)。
-    """
-    days = max(1, round(days))
-    months = round(days / 30)
-    if months >= 1 and abs(months * 30 - days) <= 3:
-        return months * 30
-    if days >= 7:
-        return round(days / 7) * 7
+    days = number * SPAN_UNITS[unit]
+    if days > MAX_SPAN_DAYS:
+        raise ValueError(f'期間は{MAX_SPAN_DAYS}日以内にしてください')
     return days
 
 
-def span_label(days: int, style: str = 'full', normal: bool = False) -> str:
+def parse_span(text) -> int:
+    """parse '2ヶ月', '8週間', '60日', '60' to days
+
+    JP:
+    期間の文字列を日数にする。「2ヶ月」「2か月」「8週間」「8週」「60日」「60」。
+    """
+    match = re.fullmatch(r'\s*(\d+)\s*(\S*)\s*', str(text))
+    unit = _UNIT_ALIASES.get(match.group(2)) if match else None
+    if unit is None:
+        raise ValueError(f'期間が不正です(例: 2ヶ月、8週間、60日): {text}')
+    return unit_to_span(match.group(1), unit)
+
+
+def span_label(days: int) -> str:
     """label of span days
 
     JP:
-    期間の表示名。 60→2ヶ月、28→1ヶ月(4週間)、14→2週間、それ以外は N日。
-    style: 'full'(Markdown 等)、'short'(アプリの2段見出し)、'plain'(テキスト版)。
-    normal なら通常の期間として「(通常)」を付ける(full のみ)。
+    期間の表示名。 60→2ヶ月、28→4週間、10→10日。
     """
-    if days == 28:
-        label = {'short': '1ヶ月\n(4週間)', 'plain': '1ヶ月'}.get(
-            style, '1ヶ月(4週間)')
-    elif days % 30 == 0:
-        label = f'{days // 30}ヶ月'
-    elif days % 7 == 0:
-        label = f'{days // 7}週間'
-    else:
-        label = f'{days}日'
-    if normal and style == 'full':
-        label += '(通常)'
-    return label
+    number, unit = span_to_unit(days)
+    return f'{number}{unit}'
 
 
-def parse_spans(text) -> tuple[int, ...]:
-    """parse '60,28,14' to (60, 28, 14)
+def get_default_span(db: DrugDb) -> int:
+    """default days from visit to next visit (db meta or default)
 
     JP:
-    期間の文字列を日数のタプルにする。1〜365日の整数、重複なし。
+    次回来院日の既定(来院日から何日後か)。 DB の設定(meta 'spans' の先頭)、
+    無ければ DEFAULT_SPAN。
     """
+    value = (db.get_meta('spans') or '').replace('、', ',').split(',')[0]
     try:
-        spans = tuple(int(v) for v in str(text).replace('、', ',').split(',')
-                      if v.strip())
-    except ValueError as err:
-        raise ValueError(f'期間は日数(数字)で指定してください: {text}') \
-            from err
-    if not spans:
-        raise ValueError('期間を指定してください')
-    for days in spans:
-        if not 1 <= days <= MAX_SPAN_DAYS:
-            raise ValueError(f'期間は1〜{MAX_SPAN_DAYS}日にしてください: {days}')
-    if len(set(spans)) != len(spans):
-        raise ValueError('同じ期間が重なっています')
-    return spans
-
-
-def get_spans(db: DrugDb) -> tuple[int, ...]:
-    """spans for required count (from db meta or default)
-
-    JP:
-    次回来院までに必要な本数の期間。 DB の設定(meta 'spans')、無ければ DEFAULT_SPANS。
-    """
-    value = db.get_meta('spans')
-    if not value:
-        return DEFAULT_SPANS
-    try:
-        return parse_spans(value)
+        days = int(value)
     except ValueError:
-        return DEFAULT_SPANS
+        return DEFAULT_SPAN
+    return days if 1 <= days <= MAX_SPAN_DAYS else DEFAULT_SPAN
 
 
-def set_spans(db: DrugDb, spans) -> tuple[int, ...]:
-    """save spans (first is the usual one)
-
-    JP:
-    次回来院までに必要な本数の期間を保存する。先頭が通常の期間。
-    """
-    spans = parse_spans(','.join(str(d) for d in spans))
-    db.set_meta('spans', ','.join(str(d) for d in spans))
-    return spans
-
-
-def default_sub_spans(normal: int) -> tuple[int, int, int]:
-    """normal span and its half and quarter
+def set_default_span(db: DrugDb, days: int) -> int:
+    """save default days from visit to next visit
 
     JP:
-    通常の期間から、その半分と更に半分を既定として作る。単位に合わせて丸める。
-    例: 60(2ヶ月)→(60, 30, 14)=2ヶ月・1ヶ月・2週。
+    次回来院日の既定(来院日から何日後か)を保存する。
     """
-    return normal, snap_span(normal / 2), snap_span(normal / 4)
+    days = int(days)
+    if not 1 <= days <= MAX_SPAN_DAYS:
+        raise ValueError(f'期間は1〜{MAX_SPAN_DAYS}日にしてください: {days}')
+    db.set_meta('spans', str(days))
+    return days
 
 
 BASIS_TEXT = {
@@ -184,8 +148,6 @@ class ReportLine:
     current_name: str
     req: Requirement
     last_days: Optional[int] = None  # 直近の使い切り日数
-    # 期間パターンごとの必要数 (SPAN_PATTERNS と同じ順)
-    patterns: list[Requirement] = field(default_factory=list)
 
 
 @dataclass
@@ -193,7 +155,7 @@ class Report:
     """summary for next visit
 
     JP:
-    次回受診までのサマリー。
+    次回来院までのサマリー。 today は来院日(在庫・開封中はこの日時点)。
     """
     today: date
     next_visit: date
@@ -201,55 +163,50 @@ class Report:
     margin_days: int
     lines: list[ReportLine]
     name_mode: str = 'both'   # NAME_MODES 参照
-    spans: tuple[int, ...] = DEFAULT_SPANS   # 次回来院までに必要な本数の期間
 
-    def span_labels(self, style: str = 'full') -> list[str]:
-        """labels of spans (first is usual)"""
-        return [span_label(days, style, normal=index == 0)
-                for index, days in enumerate(self.spans)]
+    title = '目薬 受診前サマリー'
 
     @property
-    def title(self) -> str:
-        """note title"""
-        return f'目薬 受診前サマリー {self.today.isoformat()}'
+    def visit_text(self) -> str:
+        """visit date text"""
+        return f'来院日 {self.today.isoformat()}'
+
+    @property
+    def next_visit_text(self) -> str:
+        """next visit date text with days after"""
+        return f'次回来院日 {self.next_visit.isoformat()}({self.span}日後)'
 
 
 def make_report(db: DrugDb, today=None, span: Optional[int] = None,
                 next_visit=None, margin_days: int = 0,
-                name_mode: str = 'both', spans=None, **kwargs) -> Report:
+                name_mode: str = 'both', **kwargs) -> Report:
     """make summary report
 
     JP:
-    サマリーを作る。次回受診日は span(日数)または next_visit(日付)で指定。
+    サマリーを作る。 today は来院日(省略時今日)。
+    次回来院日は next_visit(日付)または span(来院日から何日後か)で指定。
+    どちらも無ければ設定の期間(get_default_span)後。
     使用終了した薬は含めない。 name_mode は名前の表示(NAME_MODES)。
     """
     if name_mode not in NAME_MODES:
         raise ValueError(f'name_mode が不正です: {name_mode}')
-    spans = tuple(spans) if spans else get_spans(db)
     today = to_date(today) or date.today()
     if next_visit is not None:
         next_visit = to_date(next_visit)
         span = (next_visit - today).days
     else:
-        span = spans[0] if span is None else span
+        span = get_default_span(db) if span is None else span
         next_visit = today + timedelta(days=span)
+    if span < 1:
+        raise ValueError('次回来院日は来院日より後の日付にしてください')
     lines = []
     for drug in db.list_drugs(active_only=True):
         req = db.requirement(drug['drug_id'], span=span, today=today,
                              margin_days=margin_days, **kwargs)
-        patterns = [db.requirement(drug['drug_id'], span=days, today=today,
-                                   margin_days=margin_days, **kwargs)
-                    for days in spans]
         lines.append(ReportLine(
             drug['drug_id'], drug['name'], db.current_name(drug['drug_id']),
-            req, last_days(db.lifetimes(drug['drug_id'], as_of=today)),
-            patterns))
-    return Report(today, next_visit, span, margin_days, lines, name_mode,
-                  spans)
-
-
-def _fmt_days(value) -> str:
-    return '-' if value is None else f'{value:.0f}'
+            req, last_days(db.lifetimes(drug['drug_id'], as_of=today))))
+    return Report(today, next_visit, span, margin_days, lines, name_mode)
 
 
 def line_name(line: ReportLine, mode: str = 'both') -> str:
@@ -280,10 +237,10 @@ def opened_text(req: Requirement, remaining_label: str = '推定残り') -> str:
     text = f'{req.opened.month}/{req.opened.day}開封 {req.elapsed}日経過'
     if req.remaining is not None:
         if 'over estimate' in req.info:
-            over = req.elapsed - req.estimate.days
-            text += f' (推定より{over:.0f}日長く使えています)'
+            over = req.elapsed - req.normal
+            text += f' (推定より{over}日長く使えています)'
         else:
-            text += f' {remaining_label}約{req.remaining:.0f}日'
+            text += f' {remaining_label}約{req.remaining}日'
     return text
 
 
@@ -304,11 +261,7 @@ def notices(line: ReportLine) -> list[tuple[str, str]]:
     推定超過(over estimate)は開封中の状態(opened_text)に出すので除く。
     """
     req = line.req
-    result = [('warning', WARNING_TEXT.get(w, w)) for w in req.warnings
-              if w != 'over prescription limit']
-    if req.shortage:
-        result.append(('warning', f'処方上限{MAX_PRESCRIPTION}本では'
-                                  f'次回受診までに{req.shortage}本不足します'))
+    result = [('warning', WARNING_TEXT.get(w, w)) for w in req.warnings]
     if 'over max_days' in req.info:
         result.append(('info', f'開封から{req.elapsed}日経過。廃棄期限'
                                f'({discard_label(req.max_days)})を過ぎています'))
@@ -316,10 +269,10 @@ def notices(line: ReportLine) -> list[tuple[str, str]]:
 
 
 def estimate_text(req: Requirement) -> str:
-    """estimated days per bottle text
+    """normal days per bottle text
 
     JP:
-    1本あたりの推定日数。随時使用なら参考値である旨を付ける。
+    通常期間(1本あたりの推定日数)とその根拠。随時使用なら参考値である旨を付ける。
     """
     est = req.estimate
     if est.basis.startswith('recent'):
@@ -328,7 +281,8 @@ def estimate_text(req: Requirement) -> str:
         basis = BASIS_TEXT.get(est.basis, est.basis)
     if req.as_needed:
         basis += '・随時使用のため参考値'
-    return f'1本あたり推定 {_fmt_days(req.estimate.days)}日 ({basis})'
+    days = '-' if req.normal is None else f'{req.normal}日'
+    return f'通常期間 {days} ({basis})'
 
 
 def _md_cell(value) -> str:
@@ -340,52 +294,73 @@ def remaining_text(req: Requirement) -> str:
     """estimated remaining days text for stock table
 
     JP:
-    推定残日数。推定を超えて使用中なら「超過N日」。推定できなければ空。
+    推定残日数(来院日時点)。推定を超えて使用中なら「超過N日」。推定できなければ空。
     """
     if req.remaining is None:
         return ''
     if 'over estimate' in req.info:
-        return f'超過{req.elapsed - req.estimate.days:.0f}日'
-    return f'{req.remaining:.0f}'
+        return f'超過{req.elapsed - req.normal}日'
+    return str(req.remaining)
 
 
-def pattern_cell(req: Requirement) -> str:
-    """request cell for pattern table
+def need_cell(req: Requirement) -> str:
+    """required count cell
 
     JP:
-    申告表のセル。処方が必要なら「必要2」(2 は依頼数)、不要なら空欄。
+    必要本数(処方をお願いする本数)のセル。処方不要は「0」。
     随時使用は「随時」、推定不能は「相談」。
     """
     if req.as_needed:
         return '随時'
     if req.need is None:
         return '相談'
-    if req.shortage:
-        return f'必要{req.request}(不足{req.shortage})'
-    return f'必要{req.request}' if req.request else ''
+    return str(req.need)
 
 
-def pattern_table(report: Report) -> list[str]:
+def basis_cells(req: Requirement) -> list:
+    """basis cells: short days, stock days, unopened, normal, opened left
+
+    JP:
+    必要本数の根拠のセル [足りない日数, 在庫残日数, 未開封, 通常期間, 開封分残日数]。
+    随時使用・推定不能は未開封以外を空欄にする。
+    """
+    if req.stock_days is None:
+        return ['', '', req.stock, '', '']
+    return [req.short_days, req.stock_days, req.stock, req.normal,
+            req.opened_left]
+
+
+BASIS_HEADS = ['足りない日数', '在庫残日数', '未開封', '通常期間', '開封分残日数']
+
+# 必要本数と根拠の説明(Markdown とテキスト版で共通)
+NEED_NOTES = [
+    '必要本数…処方をお願いする本数。足りない日数 ÷ 通常期間 を切り上げ、'
+    f'予備{SPARE_BOTTLES}本を足した本数(0未満は0)。0 は処方不要',
+    '足りない日数…次回来院日までの日数 − 在庫残日数。マイナスは余る日数',
+    '在庫残日数…来院日の時点で残っている目薬の日数'
+    '(開封分残日数 + 未開封 × 通常期間)',
+    '未開封…来院日の時点で未開封の本数',
+    '通常期間…1本を何日で使い切るか(イレギュラーを除く直近3本の平均)',
+    '開封分残日数…来院日の時点での、いま使っている1本の残り日数'
+    '(通常期間 − (来院日 − 開封日)。使い切っている・開封中なしは0)',
+]
+
+
+def need_table(report: Report) -> list[str]:
     """'次回来院までに必要な本数' table lines (markdown)
 
     JP:
-    「次回来院までに必要な本数」の表。期間パターンごとの依頼数(必要本数)。
+    「次回来院までに必要な本数」の表。必要本数に続いて根拠の列。
     """
-    heads = ' | '.join(report.span_labels())
     mode = report.name_mode
     out = ['## 次回来院までに必要な本数', '',
-           f'| {NAME_HEAD[mode]} | 未開封 | {heads} |',
-           '|---|---:|' + '---:|' * len(report.spans)]
+           f"| {NAME_HEAD[mode]} | 必要本数 | {' | '.join(BASIS_HEADS)} |",
+           '|---|---:|' + '---:|' * len(BASIS_HEADS)]
     for line in report.lines:
-        cells = ' | '.join(pattern_cell(r) for r in line.patterns)
-        out.append(f'| {_md_cell(line_name(line, mode))} | {line.req.stock}'
-                   f' | {cells} |')
-    out += ['',
-            f'- 必要N…処方をお願いする本数(期間中に使う本数 + 予備{SPARE_BOTTLES}'
-            ' − 未開封)。空欄は処方不要',
-            f'- 1回の処方は最大{MAX_PRESCRIPTION}本(健康保険の制限)。'
-            '超える分は「不足N」',
-            '- 期間中に使う本数は開封中の推定残日数を差し引いて計算']
+        cells = ' | '.join(str(v) for v in basis_cells(line.req))
+        out.append(f'| {_md_cell(line_name(line, mode))}'
+                   f' | {need_cell(line.req)} | {cells} |')
+    out += [''] + [f'- {text}' for text in NEED_NOTES]
     return out
 
 
@@ -414,11 +389,11 @@ def stock_table(report: Report) -> list[str]:
         out.append(f'| {_md_cell(name)} | {req.stock} | {opened}'
                    f' | {elapsed} | {remaining_text(req)} | {days} |')
     out += ['',
-            '- 未開封個数…現時点で未開封の個数',
+            '- 未開封個数…来院日の時点で未開封の個数',
             '- 開封分開封日…現在使用しているのを開封した日',
-            '- 経過日数…開封分開封日から今日までの日数',
-            '- 推定残日数…イレギュラーでない過去の使い切り日数(直近の平均)から'
-            '推定した残り日数',
+            '- 経過日数…開封分開封日から来院日までの日数',
+            '- 推定残日数…来院日の時点で現在使っている1本の推定残り日数'
+            '(通常期間 − 経過日数)',
             '- 日数…直近の使い切り日数(途中廃棄やイレギュラーの場合は空欄)']
     return out
 
@@ -429,24 +404,21 @@ def to_plain_text(report: Report) -> str:
     JP:
     テキスト版のサマリー。 Evernote の Android アプリのように、貼り付けると
     書式なしのテキストになるところでも読みやすいよう、記号の少ない1行1薬の形。
-    処方不要は「不要」。
     """
     mode = report.name_mode
-    labels = report.span_labels('plain')
-    out = [report.title, '',
-           f"■ 次回来院までに必要な本数({' / '.join(labels)})"]
+    out = [report.title, report.visit_text, report.next_visit_text, '',
+           '■ 次回来院までに必要な本数']
     for line in report.lines:
-        head = f'{line_name(line, mode)}  未開封{line.req.stock}'
-        if line.req.as_needed:
-            out.append(f'{head}  随時使用')
+        req = line.req
+        head = f'{line_name(line, mode)}  必要本数{need_cell(req)}'
+        if req.as_needed:
+            out.append(f'{head}  未開封{req.stock}')
             continue
-        cells = [f'{label}:{pattern_cell(req) or "不要"}'
-                 for label, req in zip(labels, line.patterns)]
+        cells = [f'{label}{value}' for label, value
+                 in zip(BASIS_HEADS, basis_cells(req)) if value != '']
         out.append('  '.join([head] + cells))
-    out += [f'(必要N…処方をお願いする本数。予備{SPARE_BOTTLES}本込み・'
-            f'1回の処方は最大{MAX_PRESCRIPTION}本)',
-            '',
-            '■ 目薬在庫']
+    out += [f'・{text}' for text in NEED_NOTES]
+    out += ['', '■ 目薬在庫']
     for line in report.lines:
         req = line.req
         if req.as_needed:
@@ -473,8 +445,9 @@ def to_markdown(report: Report) -> str:
     Markdown 形式のサマリー。
     """
     mode = report.name_mode
-    out = [f'# {report.title}', '']
-    out += pattern_table(report)
+    out = [f'# {report.title}', '',
+           f'- {report.visit_text}', f'- {report.next_visit_text}', '']
+    out += need_table(report)
     out += [''] + stock_table(report)
     notes = [f'- {LEVEL_LABEL[level]} {line_name(line, mode)}: {text}'
              for line in report.lines for level, text in notices(line)]

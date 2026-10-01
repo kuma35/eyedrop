@@ -25,10 +25,10 @@ Signing certificate: `CN=kuma35`, SHA-256
 
 ## Command-line version
 
-Requires Python 3.9 or later (standard library only; tested with 3.9 to 3.13).
+Requires Python 3.9 or later (standard library only; tested with 3.9 to 3.14).
 
 ```sh
-git clone <<this-repo>> eyedrop
+git clone https://github.com/kuma35/eyedrop.git eyedrop
 cd eyedrop
 drugdb/cmd_drugdb.sh help
 ```
@@ -37,7 +37,7 @@ drugdb/cmd_drugdb.sh help
 
 ## Documentation
 
-Detailed documentation (in Japanese) will be available on GitHub Pages.
+Detailed documentation (in Japanese): https://kuma35.github.io/eyedrop/
 
 ## License
 

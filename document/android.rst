@@ -15,7 +15,7 @@ Android版
 インストール
 ============
 
-GitHub の Releases から ``eyedrop.apk`` をダウンロードし、次のどちらかでインストールします。
+GitHub の `Releases <https://github.com/kuma35/eyedrop/releases>`_ から ``eyedrop.apk`` をダウンロードし、次のどちらかでインストールします。
 
 **スマホで直接インストールする**
 
@@ -130,7 +130,7 @@ Linux(Ubuntu 24.04 で確認)で APK を作る手順です。ビルドする PC 
 
 .. code-block:: console
 
-   $ git clone <リポジトリの URL> eyedrop
+   $ git clone https://github.com/kuma35/eyedrop.git eyedrop
    $ cd eyedrop
    $ python3 -m venv venv
    $ venv/bin/pip install -r requirements.txt

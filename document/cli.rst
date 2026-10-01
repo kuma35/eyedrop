@@ -16,7 +16,7 @@ CLI版
 
 .. code-block:: console
 
-   $ git clone <リポジトリの URL> eyedrop
+   $ git clone https://github.com/kuma35/eyedrop.git eyedrop
    $ cd eyedrop
    $ drugdb/cmd_drugdb.sh help
 

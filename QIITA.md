@@ -17,8 +17,8 @@ ignorePublish: false
 眼科の受診時に、次の受診までに必要な目薬の種類と本数を算出する
 Android アプリとコマンドライン(CLI)ツールを Python で作りました。
 
-- ドキュメント: <GitHub Pages の URL>
-- ソース: <リポジトリの URL>(MIT License)
+- ドキュメント: https://kuma35.github.io/eyedrop/
+- ソース: https://github.com/kuma35/eyedrop(MIT License)
 
 # 経緯
 

@@ -22,3 +22,6 @@ mobile/build/
 # Android の署名の鍵(公開用の keystore)。絶対にコミットしない。保存先はリポジトリの外(~/keys/)
 *.jks
 *.keystore
+
+# Sphinx の作業用ビルド(公開用の HTML は docs/ に出力してコミットする)
+document/_build/

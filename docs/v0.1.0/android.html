@@ -1,0 +1,253 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="ja" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Android版 &mdash; 目薬管理 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/general.css?v=c0a7eb24" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/dark.css?v=70edf1c7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1d5d09e3"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/translations.js?v=4755f45a"></script>
+      <script src="_static/dark_mode_js/default_dark.js?v=fd565c74"></script>
+      <script src="_static/dark_mode_js/theme_switcher.js?v=358d3910"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="CLI版" href="cli.html" />
+    <link rel="prev" title="目薬管理(eyedrop)" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            目薬管理(eyedrop)
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Android版</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id1">動作環境</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id2">インストール</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id3">署名の確認(フィンガープリント)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id4">画面と使い方</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id5">サマリー</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id6">目薬</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id7">目薬の詳細</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id8">設定</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#id9">ビルド</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="estimate.html">推定のしくみ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">目薬管理(eyedrop)</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Android版</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="android">
+<h1>Android版<a class="headerlink" href="#android" title="Link to this heading"></a></h1>
+<p>個人で Google Play に登録するのは大変なので、いわゆる野良APK です。
+データは端末の中だけにあり、ネットワークは使いません。</p>
+<section id="id1">
+<h2>動作環境<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Android 7.0 以上</p></li>
+<li><p>64bit の ARM 端末(arm64-v8a)。スマホ・タブレットとも可</p></li>
+<li><p>実機で確認したのは Android 16(シャープ AQUOS sense8)と Android 10(TECLAST M40 タブレット)</p></li>
+</ul>
+</section>
+<section id="id2">
+<h2>インストール<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<p>GitHub の Releases から <code class="docutils literal notranslate"><span class="pre">eyedrop.apk</span></code> をダウンロードし、次のどちらかでインストールします。</p>
+<p><strong>スマホで直接インストールする</strong></p>
+<ol class="arabic simple">
+<li><p>スマホのブラウザで <code class="docutils literal notranslate"><span class="pre">eyedrop.apk</span></code> をダウンロード</p></li>
+<li><p>ダウンロードした <code class="docutils literal notranslate"><span class="pre">eyedrop.apk</span></code> をタップ</p></li>
+<li><p>「この提供元のアプリを許可」を求められたら、ブラウザ(またはファイルアプリ)に許可してインストール</p></li>
+</ol>
+<p><strong>PC から USB 経由でインストールする</strong></p>
+<ol class="arabic simple">
+<li><p>スマホで「設定 → デバイス情報 → ビルド番号」を7回タップし、開発者向けオプションで「USB デバッグ」をオン</p></li>
+<li><p>スマホを USB で PC につなぎ、「USB デバッグを許可」で許可</p></li>
+<li><p>PC で次を実行(<code class="docutils literal notranslate"><span class="pre">adb</span></code> は Android SDK Platform-Tools に含まれます)</p></li>
+</ol>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>adb<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>eyedrop.apk
+</pre></div>
+</div>
+<p>インストール直後はデータが空です。「目薬」タブで目薬を追加するか、
+バックアップ(または CLI版の <code class="docutils literal notranslate"><span class="pre">eyedrop.db</span></code>)を「設定」タブの「ファイルから復元」で取り込みます。
+アプリを上書きで更新してもデータは消えませんが、機種変更などに備えて
+「設定」タブの「ファイルに保存」でときどきバックアップしてください。</p>
+</section>
+<section id="id3">
+<h2>署名の確認(フィンガープリント)<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<p>配布している APK は次の証明書で署名しています。
+ダウンロードした APK が本物かどうかは、証明書の SHA-256 フィンガープリントがこれと一致するかで確かめられます。</p>
+<ul class="simple">
+<li><p>証明書: <code class="docutils literal notranslate"><span class="pre">CN=kuma35</span></code></p></li>
+<li><p>SHA-256: <code class="docutils literal notranslate"><span class="pre">97:4A:8A:A3:16:77:C6:CF:66:BA:03:AE:A0:47:88:37:CB:A8:07:05:83:62:6D:FD:34:35:8F:32:19:23:4D:A0</span></code></p></li>
+</ul>
+<p>確認には Android SDK Build-Tools の <code class="docutils literal notranslate"><span class="pre">apksigner</span></code> を使います(<code class="docutils literal notranslate"><span class="pre">keytool</span> <span class="pre">-printcert</span> <span class="pre">-jarfile</span></code> では読めません)。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>apksigner<span class="w"> </span>verify<span class="w"> </span>--print-certs<span class="w"> </span>eyedrop.apk
+<span class="go">Signer #1 certificate DN: CN=kuma35</span>
+<span class="go">Signer #1 certificate SHA-256 digest: 974a8aa31677c6cf66ba03aea0478837cba8070583626dfd34358f3219234da0</span>
+<span class="go">...</span>
+</pre></div>
+</div>
+</section>
+<section id="id4">
+<h2>画面と使い方<a class="headerlink" href="#id4" title="Link to this heading"></a></h2>
+<p>画面は下部のタブで切り替えます。画面の例は <a class="reference internal" href="sample.html"><span class="doc">サンプルデータ</span></a> で、次回来院日を4ヶ月後にしたものです。
+画面上部の「A－」「A＋」で文字の大きさを変えられます。</p>
+<section id="id5">
+<h3>サマリー<a class="headerlink" href="#id5" title="Link to this heading"></a></h3>
+<a class="reference internal image-reference" href="_images/summary.png"><img alt="サマリー" src="_images/summary.png" width="270" />
+</a>
+<p>来院日(既定は今日)と次回来院日(既定は来院日の2ヶ月後)を表示し、
+次回来院までに必要な本数を目薬ごとに計算します。
+来院日・次回来院日は押すとカレンダーで変えられます。
+表は横にスクロールでき、必要本数に続いて根拠(足りない日数・在庫残日数・未開封・通常期間・開封分残日数)を表示します。
+計算のしかたは <a class="reference internal" href="estimate.html"><span class="doc">推定のしくみ</span></a> を参照してください。</p>
+<a class="reference internal image-reference" href="_images/stock.png"><img alt="目薬在庫・注意" src="_images/stock.png" width="270" />
+</a>
+<p>下にスクロールすると「目薬在庫」(未開封の本数、開封中の1本の開封日・推定残日数、通常何日で使い切っているか)と、
+廃棄期限を過ぎているなどの「注意」があります。
+左上のメニューから、サマリーを Markdown・テキスト・チャットAI 用でコピーできます。</p>
+</section>
+<section id="id6">
+<h3>目薬<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<a class="reference internal image-reference" href="_images/drugs.png"><img alt="目薬タブ" src="_images/drugs.png" width="270" />
+</a>
+<p>目薬ごとのカードで、次の操作をします。</p>
+<ul class="simple">
+<li><p><strong>開封(出庫)</strong>: 新しい1本を在庫から出して使い始める。使っていた1本は使い切りとして記録</p></li>
+<li><p><strong>入庫</strong>: 処方された本数を記録</p></li>
+<li><p><strong>棚卸し</strong>: 未開封の本数を数え直したときに記録</p></li>
+<li><p><strong>詳細</strong>: 目薬名・開封の履歴・在庫の履歴など</p></li>
+<li><p><strong>利用終了</strong>: その目薬(代表目薬名ごと)を使わなくなったとき</p></li>
+</ul>
+<p>上の「目薬追加」で新しい目薬を登録します。</p>
+</section>
+<section id="id7">
+<h3>目薬の詳細<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<a class="reference internal image-reference" href="_images/detail.png"><img alt="目薬の詳細" src="_images/detail.png" width="270" />
+</a>
+<ul class="simple">
+<li><p><strong>目薬名</strong>: ジェネリックなどで実際にもらう目薬の名前が変わったら「目薬を追加」。
+代表目薬名(例: コソプト)はそのままで、目薬名(例: ドルモロール)を追加・利用終了できます</p></li>
+<li><p><strong>随時</strong>: 毎日ではなく必要なときに使う目薬。必要本数を計算せず在庫だけ表示します</p></li>
+<li><p><strong>廃棄期限設定</strong>: 「開封後4週間で廃棄」などの目安。過ぎると「注意」に表示します</p></li>
+<li><p><strong>点眼パターン変更</strong>: 1日の点眼回数などが変わったとき。直近の1本をイレギュラーにし、
+それより前の実績を推定に使わないようにします</p></li>
+<li><p><strong>開封の履歴</strong>: タップでイレギュラー(推定に使わない)を切り替えます。
+一番新しい開封は取り消せます</p></li>
+</ul>
+</section>
+<section id="id8">
+<h3>設定<a class="headerlink" href="#id8" title="Link to this heading"></a></h3>
+<p>バックアップ(ファイルに保存・共有で送る)、ファイルから復元、年次更新、
+次回来院日の既定の期間、表示(黒地に白)を設定します。</p>
+</section>
+</section>
+<section id="id9">
+<h2>ビルド<a class="headerlink" href="#id9" title="Link to this heading"></a></h2>
+<p>Linux(Ubuntu 24.04 で確認)で APK を作る手順です。ビルドする PC には Python 3.10 以上が必要です
+(スマホには Python は不要です。APK に同梱されています)。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>&lt;リポジトリの<span class="w"> </span>URL&gt;<span class="w"> </span>eyedrop
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>eyedrop
+<span class="gp">$ </span>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>venv
+<span class="gp">$ </span>venv/bin/pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>mobile
+<span class="gp">$ </span>../venv/bin/flet<span class="w"> </span>build<span class="w"> </span>apk<span class="w"> </span>--yes<span class="w"> </span>--arch<span class="w"> </span>arm64-v8a<span class="w">    </span><span class="c1"># → build/apk/eyedrop.apk</span>
+<span class="gp">$ </span>~/Android/sdk/platform-tools/adb<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>build/apk/eyedrop.apk<span class="w">   </span><span class="c1"># USB でつないだスマホへ</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>初回のビルドは Flutter・JDK・Android SDK を自動で取り込むので時間がかかります(Android SDK は <code class="docutils literal notranslate"><span class="pre">~/Android/sdk</span></code>)</p></li>
+<li><p>32bit の ARM 端末向けには <code class="docutils literal notranslate"><span class="pre">--arch</span> <span class="pre">armeabi-v7a</span></code> で作ります</p></li>
+<li><p>APK は PC の開発用の鍵(<code class="docutils literal notranslate"><span class="pre">~/.android/debug.keystore</span></code>、自動作成)で署名されます。
+上書き更新には同じ鍵で署名した APK が必要です。配布版の APK を入れたスマホに自分でビルドした APK を入れるときは、
+先にバックアップを取ってアンインストールしてから入れ、「ファイルから復元」でデータを戻してください</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="目薬管理(eyedrop)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cli.html" class="btn btn-neutral float-right" title="CLI版" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, kuma35.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

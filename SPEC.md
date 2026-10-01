@@ -195,6 +195,34 @@
   - 新しい版は新しいフォルダにビルドし、ランディングページに1行足して「最新版」のリンクを張り替える。
     過去の版のフォルダは以後変更しない(凍結)。ソースは git のタグ(`v0.1.0` など)で残し、必要なら過去の版を再ビルドできるようにする
   - GitHub Pages ではシンボリックリンクに頼らない(「最新版」はランディングページのリンクで表す)
+- 2026-10-01 作成(v0.1.0):
+  - ページ: `index`(概要・経緯・できること・特徴・ライセンス・注意)、`android`(動作環境・インストール・署名の確認・
+    画面と使い方(スクリーンショット4枚)・ビルド)、`cli`(動作環境・起動方法・使用例・コマンド一覧)、
+    `estimate`(推定のしくみ・必要本数・計算の例・定数)、`sample`(サンプルデータ)
+  - QIITA.md から `pandoc -f gfm -t rst` で下書きを作り、Claude が整えた。pandoc は日本語の見出しの下線を文字数で付けるが、
+    docutils は全角を2文字分の幅と数えるので短すぎる → 手で書き直した。CLI の出力例は QIITA.md の例
+    (記録の ID などが手で作られていた)ではなく、同じ架空データを DB に再現して実際に出した出力にした
+  - インラインリテラル ``` ``…`` ``` の直後に「・」や全角「(」が続くと docutils が終わりと認めず警告になる → `\ ` を挟む
+  - 画像はリポジトリ直下の `images/`(README と共用)を `../images/` で参照(Sphinx が `_images/` にコピー)
+  - テーマは sphinx_rtd_theme + sphinx_rtd_dark_mode(既定は黒地。アプリに合わせた)。`conf.py` の版は
+    `mobile/pyproject.toml` の version から読む
+  - `needs.rst`(2022年の最初の要求メモ)は user の指示で削除。`document/_build/`(2022年のビルド結果)は git の管理から外し ignore
+  - ビルド: `venv/bin/sphinx-build -b html -d document/_build/doctrees document docs/v0.1.0`
+    (`-d` で中間ファイルを docs/ の外に出す。`html_copy_source = False` で rst のコピーも出さない)
+  - `docs/index.html`(ランディングページ。手書き、黒地/白地は端末の設定に従う)と `docs/.nojekyll` を作成
+  - ヘッドレスの Chrome で表示を確認(トップ・Android版・ランディングページ)
+- 残り:
+  - [x] 1つの版が約 10MB(大半は sphinx_rtd_theme のフォント・CSS 9.7MB)。版の間でテーマのファイルを共有するか
+    → 共有しない(2026-10-01 user の決定)。git は中身が同じファイルを1つしか保存しないので、同じ版のテーマなら
+    新しい版のフォルダを足しても履歴に増えるのは HTML など小さなファイルだけ(テーマを更新したときだけフォント・CSS が増える)。
+    増えるのは clone した作業フォルダと公開サイトの容量(1版約 10MB、GitHub Pages の上限 1GB)。
+    共有案(参考): シンボリックリンクは GitHub Pages で使えるか確証がなく、Windows の clone で壊れることがあるので不可。
+    ビルド後に `_static/css`・`_static/fonts` を `docs/_shared/sphinx_rtd_theme-版/` に移して HTML の参照を書き換える
+    スクリプトなら可能だが、手順が増えテーマの構造の変化で壊れうるので採らない
+    (`_static` 全体は `documentation_options.js` など版ごとに違うファイルがあるので共有できない)
+  - [ ] GitHub で Pages を有効にする(Settings → Pages → main ブランチの /docs)。公開 URL が決まったら README.md の
+    Documentation と QIITA.md にリンクを書く。`<リポジトリの URL>` も置き換える
+  - [ ] Qiita の記事(QIITA.md)を概要と GitHub Pages へのリンク中心に短くする
 
 ## CLI版
 ### cli-TODO ###

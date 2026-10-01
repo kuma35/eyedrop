@@ -157,7 +157,7 @@
      自動回転は OFF のまま。タブレット(TECLAST M40)は画面が動くかの確認用だったので、入れ替えずに user がアンインストール(2026-10-01)
 
 ### GitHub で公開する
-- [ ] 公開前の確認と決定(2026-10-01、user の決定):
+- [x] 公開前の確認と決定(2026-10-01、user の決定):
   - 全履歴に ods・実名・署名の鍵ファイル・署名のパスワード・本番の eyedrop.db が無いことを確認
   - 履歴にある `drugdb/eyedrop.db` は 2023-03 の開発初期のもので全テーブル 0件(データなし)。不要なので削除
   - コミットの作者のメールアドレスはそのまま公開する(GitHub の匿名アドレスへの書き換えはしない)
@@ -166,6 +166,16 @@
   - ブランチを master → main に変更。リポジトリは `kuma35/eyedrop`、public
   - 手順: リポジトリ作成・プッシュ → GitHub Pages を有効化(main の /docs) → URL を README・QIITA.md・ドキュメントに書いて
     ドキュメントを再ビルド → タグ v0.1.0 → Releases に APK(公開用の鍵で署名したもの。指紋を確認してから)を添付
+  → 2026-10-01 公開:
+  - リポジトリ https://github.com/kuma35/eyedrop(public、既定ブランチ main)。`gh repo create --source=. --push`
+  - GitHub Pages https://kuma35.github.io/eyedrop/(main の /docs。`gh api -X POST repos/kuma35/eyedrop/pages`)。
+    ランディングページ・v0.1.0 の各ページ・`_static`・画像とも表示を確認(HTTP 200、最新のコミットの内容)。
+    Pages の API の status は「errored」と出るが、実際の公開(Actions の pages-build-deployment)は成功していて、
+    ページも最新。1回目の実行は2回目のプッシュで打ち切られた(cancelled)だけ。様子を見る
+  - README・QIITA.md・ドキュメント(cli・android)・ランディングページの URL の仮の表記を実際の URL に置き換え、ドキュメントを再ビルド
+  - タグ v0.1.0、Releases https://github.com/kuma35/eyedrop/releases/tag/v0.1.0 に `eyedrop.apk` を添付
+    (公開用の鍵で署名済み・指紋一致、APK のビルド後にアプリのコードの変更なしを確認。リリースノートに証明書の指紋と
+    ファイルの SHA-256 を記載)
 
 ### SPEC.md から実名を消す
 - [x] (公開前に必須)このファイルの「git 履歴から本番データ(ods)を消す」の節にある、サンプルデータ作成の表と
@@ -231,8 +241,8 @@
     ビルド後に `_static/css`・`_static/fonts` を `docs/_shared/sphinx_rtd_theme-版/` に移して HTML の参照を書き換える
     スクリプトなら可能だが、手順が増えテーマの構造の変化で壊れうるので採らない
     (`_static` 全体は `documentation_options.js` など版ごとに違うファイルがあるので共有できない)
-  - [ ] GitHub で Pages を有効にする(Settings → Pages → main ブランチの /docs)。公開 URL が決まったら README.md の
-    Documentation と QIITA.md にリンクを書く。`<リポジトリの URL>` も置き換える
+  - [x] GitHub で Pages を有効にする(Settings → Pages → main ブランチの /docs)。公開 URL が決まったら README.md の
+    Documentation と QIITA.md にリンクを書く。`<リポジトリの URL>` も置き換える → 2026-10-01 済(上の「GitHub で公開する」)
   - [x] Qiita の記事(QIITA.md)を概要と GitHub Pages へのリンク中心に短くする
     → 2026-10-01 約390行 → 70行に。残したもの: 概要(ドキュメント・ソースへのリンク。URL は仮)、経緯、できること、
     必要本数の計算式、過去の受診日で計算し直した結果のひとこと、Android版と CLI版の紹介、注意。

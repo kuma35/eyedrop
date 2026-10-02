@@ -391,8 +391,12 @@
     証明書の指紋とファイルの SHA-256。GitHub Pages に v0.2.0 のドキュメントが出たことを確認(ランディングページの最新版も v0.2.0)。
     Releases の v0.1.0 は残す(user の決定、Claude の提案。docs/v0.1.0 からのリンク、ダウンロード済みの APK の確認のため。
     Latest は v0.2.0 になるので利用者はまず v0.2.0 を見る)
-  - [ ] APK の versionCode が v0.1.0 と同じ 1 のまま(flet の既定)。手で入れる分には上書きできるが、版ごとに上げるのが
+  - [x] APK の versionCode が v0.1.0 と同じ 1 のまま(flet の既定)。手で入れる分には上書きできるが、版ごとに上げるのが
     Android の決まり。次の版から `flet build --build-number 番号` で上げる(`build_release_apk.sh` に入れる)
+    → 2026-10-02 `build_release_apk.sh` に組み込んだ。versionCode は `mobile/pyproject.toml` の version から自動で決める:
+    主番号 * 10000 + 副番号 * 100 + 修正番号(0.2.0 → 200、0.2.1 → 201、1.0.0 → 10000。副番号・修正番号は 0〜99、
+    「数.数.数」でなければ止まる)。`--build-number` で渡し、ビルド後に APK の versionCode・versionName を確かめる。
+    Releases の v0.1.0・v0.2.0 の APK は versionCode 1(これより大きいので上書きできる)
 
 ## Android版
 

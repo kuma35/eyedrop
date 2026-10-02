@@ -333,6 +333,49 @@
   
 - [x] CLI版をインストールできるようにするのと、 @QIITA.md の 「CLI版」の「インストール方法」にインストール方法記述
 
+- [x] 目薬管理の CLI 版を配布可能にする(2026-10-02 user の指示)
+  - path が通ったところで使えるようにする
+  - データベースのデフォルトの置き場所をホームディレクトリのどこかにする
+  - マニュアルページを作成・インストール
+  → 決定(user): インストールは `install.sh`、データベースの既定は `~/.local/share/eyedrop/eyedrop.db`
+  (`$XDG_DATA_HOME` があればその下)、コマンド名は `eyedrop`、man ページは Sphinx(rst)から生成
+  → 2026-10-02 実装:
+  - `install.sh`: 既定 `PREFIX=$HOME`(user の環境で PATH・MANPATH に入っている ~/bin・~/share/man に合わせた)。
+    `$PREFIX/bin/eyedrop`(起動スクリプト。`PYTHONPATH=$PREFIX/share/eyedrop exec python3 -m drugdb`)、
+    `$PREFIX/share/eyedrop/drugdb/`(本体の .py。入れ直すたびに作り直す)、`$PREFIX/share/man/man1/eyedrop.1`。
+    Python 3.9 以上を確認。`--uninstall` で取り除く(データベースは残す)。起動スクリプトに目印の行を入れ、
+    install.sh で入れたものでない同名のファイルは上書き・削除しない。`PYTHON=` で使う Python を変えられる。
+    一時の PREFIX で、インストール・別のフォルダからの実行・既定 DB の作成・man の検出・入れ直し・アンインストール・
+    同名ファイルの保護を確認
+  - 既定のデータベース: `cli.default_db_path()`(`$XDG_DATA_HOME/eyedrop/eyedrop.db`、無ければ
+    `~/.local/share/eyedrop/eyedrop.db`)。無ければフォルダごと作り「データベースを新しく作ります: パス」と知らせる。
+    以前の既定(リポジトリ直下の `eyedrop.db`)は使わなくなった(PC の本番データは 2026-09-25 で止まっているので
+    使うときは `-f eyedrop.db`、または `~/.local/share/eyedrop/` に移す)
+  - `eyedrop --version`(版は `drugdb/__init__.py` の `__version__`。mobile/pyproject.toml の version と揃える)。
+    `rollover` の出力先の既定を、カレントフォルダの `archive` からデータベースと同じ場所の `archive` に変更
+    (インストールしたコマンドはどこからでも実行するため)
+  - man ページ: `document/eyedrop.rst`(書式・説明・オプション・日付と期間・コマンド・必要本数の計算・環境変数・
+    ファイル・例・注意・関連項目)。HTML のドキュメントにも「eyedrop(コマンド)」として載せる。
+    `sphinx-build -b man -d document/_build/doctrees document document/_build/man` でビルドすると、
+    `conf.py` の `build-finished` で日本語向けに手直しして `man/eyedrop.1` に置く(これをコミットし install.sh が入れる)。
+    手直し: groff は日本語の文字の間で改行できず、行をそろえようとして空白を広げるので、`.ds AD l`・`.ad l`・`.nh` と、
+    日本語の文字の後に改行してよい印 `\:` を入れる(句読点・閉じ括弧・長音の前と行末には入れない)。
+    `man -l man/eyedrop.1`(幅 80・90)で troff の警告 0
+    この手直しと rst で日本語を書くときの注意は、Claude Code の個人用スキル `man-ja`
+    (`~/.claude/skills/man-ja/`。SKILL.md と単独で使える `fix_man_ja.py`)にまとめた(2026-10-02)。
+    そのコピーを `.claude/skills/man-ja/` に置いて git に入れた(user の指示)。2026-10-02 時点のスナップショットで、
+    元のスキルの改良は追跡しない(Claude Code はプロジェクトの `.claude/skills/` も読むので、clone した人も使える)
+  - ドキュメント(cli・sample)と README の CLI版の説明を install.sh・`eyedrop` コマンド・新しい既定のデータベースに合わせた。
+    公開中の docs/v0.1.0/ は凍結のため作り直していない(次の版で出す)
+- [ ] CLI 版の配布の続き(2026-10-02 記録):
+  - [ ] user のホームに `./install.sh` でインストールして使ってみる(`eyedrop --version`・`man eyedrop`)
+  - [ ] PC の本番データ(リポジトリ直下の `eyedrop.db`、2026-09-25 で止まっている)をどうするか決める
+    (`~/.local/share/eyedrop/` に移す、`-f` で使う、または使わない)
+  - [ ] 変更(install.sh・既定のデータベース・--version・man ページ・ドキュメント)をコミット・プッシュ
+  - [ ] 版を 0.2.0 に上げるか決める。上げるなら `drugdb/__init__.py` と `mobile/pyproject.toml` の version、
+    ドキュメントを `docs/v0.2.0/` にビルドしてランディングページに追加、タグ v0.2.0、Releases
+    (APK も出すなら公開用の鍵で署名してビルド)
+
 ## Android版
 
 ### Android 版の検討(2026-09-25、方針決定・実装中) ###

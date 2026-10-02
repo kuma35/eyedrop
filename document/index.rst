@@ -56,6 +56,7 @@ Android版の変更が自動で CLI版に反映されることはありません
 
    android
    cli
+   eyedrop
    estimate
    sample
 

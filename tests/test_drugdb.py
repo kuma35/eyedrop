@@ -10,6 +10,7 @@ drugdb のテスト。プロジェクト直下で
 """
 import csv
 import io
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -984,11 +985,45 @@ class TestCli(DbTestCase):
         self.assertFalse(Path(db_file).exists())
 
     def test_main_default_file_auto_creates(self):
-        db_file = str(self.path / 'auto.db')
-        with mock.patch.object(cli, 'DEFAULT_DB', Path(db_file)), \
-                redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
-            self.assertEqual(main(['add', 'X']), 0)
-        self.assertTrue(Path(db_file).exists())
+        data = self.path / 'xdg'
+        db_file = data / 'eyedrop' / 'eyedrop.db'
+        with mock.patch.dict(os.environ, {'XDG_DATA_HOME': str(data)}) as env:
+            env.pop('EYEDROP_DB', None)
+            with redirect_stderr(io.StringIO()) as err, \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['add', 'X']), 0)
+            self.assertIn(f'データベースを新しく作ります: {db_file}',
+                          err.getvalue())
+            self.assertTrue(db_file.exists())
+            # 2回目は知らせない
+            with redirect_stderr(io.StringIO()) as err, \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['drugs']), 0)
+            self.assertEqual(err.getvalue(), '')
+
+    def test_default_db_path(self):
+        with mock.patch.dict(os.environ, {'XDG_DATA_HOME': '/tmp/xdg'}):
+            self.assertEqual(cli.default_db_path(),
+                             Path('/tmp/xdg/eyedrop/eyedrop.db'))
+        with mock.patch.dict(os.environ, {'HOME': '/home/u'}) as env:
+            env.pop('XDG_DATA_HOME', None)
+            self.assertEqual(cli.default_db_path(),
+                             Path('/home/u/.local/share/eyedrop/eyedrop.db'))
+
+    def test_main_version(self):
+        from drugdb import __version__
+        with redirect_stdout(io.StringIO()) as out:
+            with self.assertRaises(SystemExit):
+                main(['--version'])
+        self.assertEqual(out.getvalue(), f'eyedrop {__version__}\n')
+
+    def test_rollover_default_out_dir(self):
+        db_file = self.path / 'data' / 'x.db'
+        db_file.parent.mkdir()
+        with redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+            self.assertEqual(main(['-f', str(db_file), '--create',
+                                   'rollover', '2020']), 0)
+        self.assertTrue((self.path / 'data' / 'archive').is_dir())
 
 
 class TestImportSheet(DbTestCase):

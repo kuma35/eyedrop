@@ -11,27 +11,48 @@ CLI版
 - Python 3.9 以上(3.9〜3.14 でテストが通ることを確認。3.8 以前は動きません)
 - 標準ライブラリだけで動きます。追加のパッケージは不要です
 
-起動方法
-========
+インストール
+============
 
 .. code-block:: console
 
    $ git clone https://github.com/kuma35/eyedrop.git eyedrop
    $ cd eyedrop
-   $ drugdb/cmd_drugdb.sh help
+   $ ./install.sh
+   $ eyedrop --version
+   $ man eyedrop
 
-データベースは、既定ではプロジェクト直下の ``eyedrop.db`` です(無ければ新しく作ります)。
+``install.sh`` は次のものを入れます(既定は ``PREFIX=$HOME``)。
+
+- ``$PREFIX/bin/eyedrop``: コマンド
+- ``$PREFIX/share/eyedrop/drugdb/``: 本体(Python のファイル)
+- ``$PREFIX/share/man/man1/eyedrop.1``: man ページ(:doc:`eyedrop` と同じ内容)
+
+``PREFIX=~/.local ./install.sh`` のように入れる場所を変えられます。
+``$PREFIX/bin`` が PATH に入っていないときは、PATH に追加するか、ログインし直してください
+(Ubuntu では ``~/bin`` と ``~/.local/bin`` は、あればログイン時に PATH に入ります)。
+更新するときは、``git pull`` してからもう一度 ``./install.sh`` を実行します。
+``./install.sh --uninstall`` で取り除きます(データベースは残します)。
+
+インストールせずに、リポジトリから ``drugdb/cmd_drugdb.sh``(または ``python3 -m drugdb``)で同じように使うこともできます。
+
+データベース
+============
+
+データベースは、既定では ``~/.local/share/eyedrop/eyedrop.db`` です
+(``$XDG_DATA_HOME`` があれば ``$XDG_DATA_HOME/eyedrop/eyedrop.db``)。
+無ければフォルダごと新しく作り、そのことを知らせます。
+
 別の場所を使う場合は ``-f`` オプションか環境変数 ``EYEDROP_DB`` で指定します。
 指定したファイルが無いとエラーになります(打ち間違いで空のデータベースを見てしまわないため)。
 新しく作るときは ``--create`` を付けます。
+Android版のバックアップのファイルも、そのまま指定して使えます。
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh -f ~/eyedrop.db drugs
-   $ drugdb/cmd_drugdb.sh -f ~/new.db --create add 目薬A
+   $ eyedrop -f ~/eyedrop-backup-20261001.db drugs
+   $ eyedrop -f ~/new.db --create add 目薬A
    $ export EYEDROP_DB=~/eyedrop.db
-
-``python3 -m drugdb`` でも起動できます(プロジェクト直下で実行)。
 
 使用例
 ======
@@ -45,11 +66,11 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh add 目薬A
+   $ eyedrop add 目薬A
    登録しました: 1 目薬A
-   $ drugdb/cmd_drugdb.sh add 目薬B --max-days 28     # 開封後4週間で廃棄(廃棄期限)
+   $ eyedrop add 目薬B --max-days 28     # 開封後4週間で廃棄(廃棄期限)
    登録しました: 2 目薬B
-   $ drugdb/cmd_drugdb.sh add 目薬C --as-needed       # 随時使用
+   $ eyedrop add 目薬C --as-needed       # 随時使用
    登録しました: 3 目薬C
 
 処方された(入庫)・開封した
@@ -57,9 +78,9 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh in 目薬A 3 -d 2026-07-10    # 3本処方された
+   $ eyedrop in 目薬A 3 -d 2026-07-10    # 3本処方された
    在庫: 3
-   $ drugdb/cmd_drugdb.sh open 目薬A -d 2026-07-21    # 新しい1本を開封
+   $ eyedrop open 目薬A -d 2026-07-21    # 新しい1本を開封
    在庫: 2
 
 ``open`` は、在庫から1本減らし、使っていた1本を「使い切り」にして、
@@ -70,12 +91,12 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh drugs
+   $ eyedrop drugs
      1 目薬A  在庫0
      2 目薬B  在庫0  (廃棄期限28日)
      3 目薬C  在庫2  (随時使用)
 
-   $ drugdb/cmd_drugdb.sh life 目薬A
+   $ eyedrop life 目薬A
        1 2026-05-01 〜 2026-05-27  26日
        2 2026-05-27 〜 2026-06-24  28日
        3 2026-06-24 〜 2026-07-21  27日
@@ -83,7 +104,7 @@ CLI版
        5 2026-08-15 〜 2026-09-11  27日
        6 2026-09-11 〜 (使用中)       20日
 
-   $ drugdb/cmd_drugdb.sh stock 目薬A
+   $ eyedrop stock 目薬A
        1 2026-05-01 入庫  3  残 3
        2 2026-05-01 出庫  1  残 2
        3 2026-05-27 出庫  1  残 1
@@ -103,7 +124,7 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh report -v 2026-09-25
+   $ eyedrop report -v 2026-09-25
 
 出力(抜粋)はこうなります。
 
@@ -143,9 +164,9 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh report -n 11/20       # 次回来院日を日付で
-   $ drugdb/cmd_drugdb.sh report -n 4週間       # 来院日から4週間後
-   $ drugdb/cmd_drugdb.sh interval 8週間        # 既定の期間を8週間に
+   $ eyedrop report -n 11/20       # 次回来院日を日付で
+   $ eyedrop report -n 4週間       # 来院日から4週間後
+   $ eyedrop interval 8週間        # 既定の期間を8週間に
 
 期間は「2ヶ月」「8週間」「60日」「60」のように指定できます(1ヶ月=30日)。
 
@@ -154,7 +175,7 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh report -v 2026-09-20 -n 2026-11-15
+   $ eyedrop report -v 2026-09-20 -n 2026-11-15
 
 対話シェル
 ----------
@@ -164,7 +185,7 @@ CLI版
 
 .. code-block:: console
 
-   $ drugdb/cmd_drugdb.sh
+   $ eyedrop
    目薬管理 (help でコマンド一覧、 q で終了)
    eyedrop> visit 9/25
    来院日 2026-09-25

@@ -14,8 +14,8 @@ CLI版で使う
 .. code-block:: console
 
    $ cp eyedrop-sample.db my-sample.db
-   $ drugdb/cmd_drugdb.sh -f my-sample.db drugs
-   $ drugdb/cmd_drugdb.sh -f my-sample.db report -v 2026-10-01 -n 4ヶ月 --plain
+   $ eyedrop -f my-sample.db drugs
+   $ eyedrop -f my-sample.db report -v 2026-10-01 -n 4ヶ月 --plain
 
 ``report`` の出力(テキスト版)はこうなります(各項目の説明の行は一部省略)。
 

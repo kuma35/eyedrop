@@ -7,15 +7,18 @@ JP:
 
 .. code-block:: shell
 
-   python3 -m drugdb                 # 対話シェル
-   python3 -m drugdb report -n 2ヶ月  # コマンドを1つ実行して終了
-   python3 -m drugdb -f other.db drugs
-   python3 -m drugdb -f other.db --create add コソプト  # 新規データベースを作る
+   eyedrop                       # 対話シェル
+   eyedrop report -n 2ヶ月        # コマンドを1つ実行して終了
+   eyedrop -f other.db drugs
+   eyedrop -f other.db --create add コソプト  # 新規データベースを作る
 
 データベースは -f で指定。省略時は環境変数 EYEDROP_DB、
-それも無ければプロジェクト直下の eyedrop.db 。
+それも無ければ既定のファイル(default_db_path。~/.local/share/eyedrop/eyedrop.db)。
 -f や EYEDROP_DB で指定したファイルが無いとエラーになる(新規作成は --create)。
 何も指定しなかったとき(既定のファイル)は無ければ新規作成する。
+
+コマンド eyedrop は install.sh で入る。リポジトリからは
+drugdb/cmd_drugdb.sh か python3 -m drugdb で同じように使える。
 
 日付は YYYY-MM-DD 、 YYYY/MM/DD または MM/DD(今年)で指定できます。
 省略すると今日です。
@@ -31,6 +34,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Optional
 
+from . import __version__
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
 from .ai_export import to_ai_prompt
 from .import_ods import import_ods
@@ -39,7 +43,20 @@ from .report import (estimate_text, get_default_span, make_report,
                      to_markdown, to_plain_text)
 from .rollover import rollover
 
-DEFAULT_DB = Path(__file__).resolve().parent.parent / 'eyedrop.db'
+APP_NAME = 'eyedrop'
+DB_NAME = 'eyedrop.db'
+
+
+def default_db_path() -> Path:
+    """default database file path
+
+    JP:
+    既定のデータベースファイル。 $XDG_DATA_HOME/eyedrop/eyedrop.db 、
+    XDG_DATA_HOME が無ければ ~/.local/share/eyedrop/eyedrop.db 。
+    """
+    base = os.environ.get('XDG_DATA_HOME') or \
+        Path.home() / '.local' / 'share'
+    return Path(base) / APP_NAME / DB_NAME
 
 
 def parse_date(text: str) -> date:
@@ -510,12 +527,14 @@ class DrugDbShell(Cmd):
     # ------------------------------------------------------------ maintenance
     @command(('year', {'type': int, 'nargs': '?', 'default': None,
                        'help': 'この年の1月1日より前を退避(既定: 昨年)'}),
-             ('-o', '--out', {'default': 'archive',
-                              'help': '出力ディレクトリ(既定 archive)'}))
+             ('-o', '--out', {'default': None,
+                              'help': '出力ディレクトリ(既定: データベースと'
+                                      '同じ場所の archive)'}))
     def do_rollover(self, args):
         """年次更新(バックアップ・エクスポート・在庫繰越)"""
         year = args.year or date.today().year - 1
-        result = rollover(self.db, year, args.out)
+        out = args.out or Path(self.db.filename).resolve().parent / 'archive'
+        result = rollover(self.db, year, out)
         self.print(f'バックアップ: {result.backup}')
         self.print(f'エクスポート: {result.export_dir}')
         self.print(f'退避: 在庫記録 {result.stock_archived}件、'
@@ -546,10 +565,12 @@ def main(argv=None) -> int:
     -f(または環境変数 EYEDROP_DB)で指定したファイルが無ければエラーにする
     (誤ったパスを指定すると気づかずに空の新規データベースを見てしまうため)。
     新しく作りたいときは --create を付ける。どちらも指定しなければ既定の
-    ファイル(プロジェクト直下の eyedrop.db)を使い、無ければ新規作成する。
+    ファイル(default_db_path)を使い、無ければフォルダごと新規作成して知らせる。
     """
     parser = argparse.ArgumentParser(
-        prog='drugdb', description='目薬の在庫・ライフタイム管理')
+        prog=APP_NAME, description='目薬の在庫・ライフタイム管理')
+    parser.add_argument('--version', action='version',
+                        version=f'%(prog)s {__version__}')
     parser.add_argument('-f', '--file', dest='filename', default=None,
                         metavar='FILENAME',
                         help='データベースファイル(省略時は環境変数 EYEDROP_DB'
@@ -562,11 +583,15 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     filename = args.filename or os.environ.get('EYEDROP_DB')
     explicit = filename is not None
-    if not explicit:
-        filename = str(DEFAULT_DB)
     if explicit and not args.create and not Path(filename).exists():
         parser.error(f'データベースファイルが見つかりません: {filename}'
                      '(新しく作る場合は --create)')
+    if not explicit:
+        path = default_db_path()
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            print(f'データベースを新しく作ります: {path}', file=sys.stderr)
+        filename = str(path)
     with DrugDb(filename) as db:
         shell = DrugDbShell(db)
         if args.command:

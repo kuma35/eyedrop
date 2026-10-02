@@ -30,8 +30,12 @@ Requires Python 3.9 or later (standard library only; tested with 3.9 to 3.14).
 ```sh
 git clone https://github.com/kuma35/eyedrop.git eyedrop
 cd eyedrop
-drugdb/cmd_drugdb.sh help
+./install.sh        # installs ~/bin/eyedrop and ~/share/man/man1/eyedrop.1 (PREFIX=... to change)
+eyedrop help
+man eyedrop
 ```
+
+The database is `~/.local/share/eyedrop/eyedrop.db` by default.
 
 `eyedrop-sample.db` is sample data. Copy it before use, as opening it updates the file.
 

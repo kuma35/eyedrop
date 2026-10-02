@@ -1,0 +1,326 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="ja" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eyedrop(コマンド) &mdash; 目薬管理 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/general.css?v=c0a7eb24" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/dark.css?v=70edf1c7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2a174dcd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/translations.js?v=4755f45a"></script>
+      <script src="_static/dark_mode_js/default_dark.js?v=fd565c74"></script>
+      <script src="_static/dark_mode_js/theme_switcher.js?v=358d3910"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="推定のしくみ" href="estimate.html" />
+    <link rel="prev" title="CLI版" href="cli.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            目薬管理(eyedrop)
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="android.html">Android版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI版</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">eyedrop(コマンド)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id1">書式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id2">説明</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id3">オプション</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id4">日付と期間</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id5">コマンド</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id6">目薬</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id7">在庫</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id8">開封(ライフタイム)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id9">受診前サマリー</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id10">保守</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#id11">必要本数の計算</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id12">環境変数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id13">ファイル</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id14">例</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id15">注意</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id16">関連項目</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="estimate.html">推定のしくみ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">目薬管理(eyedrop)</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">eyedrop(コマンド)</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="eyedrop">
+<h1>eyedrop(コマンド)<a class="headerlink" href="#eyedrop" title="Link to this heading"></a></h1>
+<section id="id1">
+<h2>書式<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<div class="line-block">
+<div class="line"><strong>eyedrop</strong> [<strong>-f</strong> <em>FILENAME</em> [<strong>--create</strong>]] [<em>コマンド</em> [<em>引数</em>...]]</div>
+<div class="line"><strong>eyedrop</strong> <strong>--version</strong></div>
+<div class="line"><strong>eyedrop</strong> <strong>-h</strong></div>
+</div>
+</section>
+<section id="id2">
+<h2>説明<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<p><strong>eyedrop</strong> は、目薬の在庫(入庫・開封・棚卸し)と、開封から使い切るまでの日数を記録し、
+来院日から次回来院日までに処方をお願いする本数を計算します。
+目薬管理(Android版)の CLI 版です。</p>
+<p><em>コマンド</em> を付けるとそのコマンドを1つ実行して終わります。
+付けなければ対話シェルになります(<code class="docutils literal notranslate"><span class="pre">help</span></code> でコマンド一覧、<code class="docutils literal notranslate"><span class="pre">コマンド</span> <span class="pre">-h</span></code> でそのコマンドのヘルプ、<code class="docutils literal notranslate"><span class="pre">q</span></code> で終了)。</p>
+</section>
+<section id="id3">
+<h2>オプション<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-f">
+<span id="cmdoption-file"></span><span class="sig-name descname"><span class="pre">-f</span></span><span class="sig-prename descclassname"> <span class="pre">FILENAME</span></span><span class="sig-prename descclassname"><span class="pre">,</span> </span><span class="sig-name descname"><span class="pre">--file</span></span><span class="sig-prename descclassname"> <span class="pre">FILENAME</span></span><a class="headerlink" href="#cmdoption-f" title="Link to this definition"></a></dt>
+<dd><p>データベースファイル。省略時は環境変数 <code class="docutils literal notranslate"><span class="pre">EYEDROP_DB</span></code>、それも無ければ既定のファイル(「ファイル」参照)。
+指定したファイルが無いとエラーになります(打ち間違いで空のデータベースを見てしまわないため)。</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-create">
+<span class="sig-name descname"><span class="pre">--create</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-create" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">-f</span></code> や <code class="docutils literal notranslate"><span class="pre">EYEDROP_DB</span></code> で指定したファイルが無ければ新しく作ります。</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-version">
+<span class="sig-name descname"><span class="pre">--version</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-version" title="Link to this definition"></a></dt>
+<dd><p>版を表示します。</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-h">
+<span id="cmdoption-help"></span><span class="sig-name descname"><span class="pre">-h</span></span><span class="sig-prename descclassname"></span><span class="sig-prename descclassname"><span class="pre">,</span> </span><span class="sig-name descname"><span class="pre">--help</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-h" title="Link to this definition"></a></dt>
+<dd><p>ヘルプを表示します。</p>
+</dd></dl>
+
+</section>
+<section id="id4">
+<h2>日付と期間<a class="headerlink" href="#id4" title="Link to this heading"></a></h2>
+<p>日付は <code class="docutils literal notranslate"><span class="pre">YYYY-MM-DD</span></code>、<code class="docutils literal notranslate"><span class="pre">YYYY/MM/DD</span></code> または <code class="docutils literal notranslate"><span class="pre">MM/DD</span></code>(今年)で指定します。省略すると今日です。</p>
+<p>期間は「2ヶ月」「2か月」「8週間」「8週」「60日」「60」のように指定します(1ヶ月 = 30日、1週間 = 7日、最大365日)。</p>
+<p><em>薬</em> は、ID(<code class="docutils literal notranslate"><span class="pre">drugs</span></code> で表示)、代表目薬名(例: コソプト)または目薬名(例: ドルモロール)で指定します。</p>
+</section>
+<section id="id5">
+<h2>コマンド<a class="headerlink" href="#id5" title="Link to this heading"></a></h2>
+<section id="id6">
+<h3>目薬<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>drugs</strong> [<strong>-a</strong>]</dt><dd><p>目薬の一覧。<code class="docutils literal notranslate"><span class="pre">-a</span></code> で使用終了した目薬も表示</p>
+</dd>
+<dt><strong>add</strong> [<strong>-d</strong> <em>日付</em>] [<strong>--max-days</strong> <em>日数</em>] [<strong>--default-days</strong> <em>日数</em>] [<strong>--as-needed</strong>] [<strong>-m</strong> <em>メモ</em>] <em>代表目薬名</em></dt><dd><p>目薬を登録。<code class="docutils literal notranslate"><span class="pre">--max-days</span></code> は開封後の廃棄期限の日数、<code class="docutils literal notranslate"><span class="pre">--default-days</span></code> は実績が無いときの想定使用日数、
+<code class="docutils literal notranslate"><span class="pre">--as-needed</span></code> は随時使用(必要本数を計算しない)</p>
+</dd>
+<dt><strong>alias</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] <em>薬</em> <em>目薬名</em></dt><dd><p>目薬名(ジェネリックなどで実際にもらう目薬の名前)を追加。代表目薬名はそのまま</p>
+</dd>
+<dt><strong>endname</strong> [<strong>-d</strong> <em>日付</em>] [<strong>--clear</strong>] <em>薬</em> <em>目薬名</em></dt><dd><p>目薬名の利用終了日を設定。<code class="docutils literal notranslate"><span class="pre">--clear</span></code> で利用中に戻す。目薬名がすべて利用終了した代表目薬名は利用終了扱い</p>
+</dd>
+<dt><strong>end</strong> [<strong>-d</strong> <em>日付</em>] <em>薬</em></dt><dd><p>目薬の使用を終了(サマリーに出さない)</p>
+</dd>
+<dt><strong>set</strong> <em>薬</em> <em>項目</em> <em>値</em></dt><dd><p>目薬の項目を変更。<em>項目</em> は name・start_date・end_date・max_days・default_days・as_needed・note・pattern_date。
+<em>値</em> に <code class="docutils literal notranslate"><span class="pre">-</span></code> を指定すると空にする(例: <code class="docutils literal notranslate"><span class="pre">set</span> <span class="pre">キサラタン</span> <span class="pre">max_days</span> <span class="pre">28</span></code>)</p>
+</dd>
+<dt><strong>show</strong> <em>薬</em></dt><dd><p>目薬の詳細(目薬名・メモ・通常期間・在庫・開封中の1本)</p>
+</dd>
+<dt><strong>note</strong> [<strong>-d</strong> <em>日付</em>] <em>薬</em> <em>メモ</em></dt><dd><p>日付付きメモを追加</p>
+</dd>
+</dl>
+</section>
+<section id="id7">
+<h3>在庫<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>in</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] <em>薬</em> <em>本数</em></dt><dd><p>入庫(処方された)</p>
+</dd>
+<dt><strong>out</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] <em>薬</em> <em>本数</em></dt><dd><p>出庫(開封以外で在庫が減った。開封は <code class="docutils literal notranslate"><span class="pre">open</span></code>)</p>
+</dd>
+<dt><strong>inv</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] <em>薬</em> <em>本数</em></dt><dd><p>棚卸し(未開封の在庫数を <em>本数</em> とする)</p>
+</dd>
+<dt><strong>stock</strong> <em>薬</em></dt><dd><p>在庫の履歴</p>
+</dd>
+<dt><strong>delstock</strong> <em>在庫記録ID</em></dt><dd><p>在庫記録を削除(訂正用。ID は <code class="docutils literal notranslate"><span class="pre">stock</span></code> で表示)</p>
+</dd>
+</dl>
+</section>
+<section id="id8">
+<h3>開封(ライフタイム)<a class="headerlink" href="#id8" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>open</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] [<strong>--no-stock</strong>] <em>薬</em></dt><dd><p>開封。在庫から1本出して使い始め、使っていた1本は使い切りにする。<code class="docutils literal notranslate"><span class="pre">--no-stock</span></code> で在庫から出庫しない</p>
+</dd>
+<dt><strong>undoopen</strong> <em>薬</em></dt><dd><p>一番新しい開封を取り消す(在庫を戻し、前の1本を使用中に戻す)</p>
+</dd>
+<dt><strong>finish</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] [<strong>-i</strong>] <em>薬</em></dt><dd><p>次を開封せずに、開封中の1本を使用終了。<code class="docutils literal notranslate"><span class="pre">-i</span></code> でイレギュラー(中止・紛失など)にする</p>
+</dd>
+<dt><strong>life</strong> <em>薬</em></dt><dd><p>ライフタイム(開封から使い切りまで)の履歴。<code class="docutils literal notranslate"><span class="pre">*</span></code> はイレギュラー</p>
+</dd>
+<dt><strong>irregular</strong> [<strong>--clear</strong>] [<strong>-m</strong> <em>メモ</em>] <em>ライフタイムID</em></dt><dd><p>ライフタイムをイレギュラー(推定に使わない)にする。<code class="docutils literal notranslate"><span class="pre">--clear</span></code> で解除。
+イレギュラーが1つあれば、それより前の実績は推定に使わない</p>
+</dd>
+<dt><strong>pattern</strong> [<strong>-d</strong> <em>日付</em>] [<strong>-m</strong> <em>メモ</em>] <em>薬</em></dt><dd><p>点眼パターン変更(1日の点眼回数などが変わったとき)。変更日より前に開封した直近の1本をイレギュラーにし、
+それより前の実績を推定に使わない</p>
+</dd>
+<dt><strong>dellife</strong> <em>ライフタイムID</em></dt><dd><p>ライフタイムを削除(訂正用。ID は <code class="docutils literal notranslate"><span class="pre">life</span></code> で表示)</p>
+</dd>
+</dl>
+</section>
+<section id="id9">
+<h3>受診前サマリー<a class="headerlink" href="#id9" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>report</strong> [<strong>-v</strong> <em>日付</em>] [<strong>-n</strong> <em>日付</em> | <em>期間</em>] [<strong>--margin</strong> <em>日数</em>] [<strong>--plain</strong>] [<strong>--ai</strong>] [<strong>-o</strong> <em>ファイル</em>]</dt><dd><p>来院日から次回来院日までに必要な本数と、その根拠・目薬在庫・注意を出力(既定は Markdown)。
+<code class="docutils literal notranslate"><span class="pre">-v</span></code> は来院日(既定は <code class="docutils literal notranslate"><span class="pre">visit</span></code> の設定、無ければ今日)、<code class="docutils literal notranslate"><span class="pre">-n</span></code> は次回来院日または来院日からの期間
+(既定は <code class="docutils literal notranslate"><span class="pre">next</span></code> の設定、無ければ <code class="docutils literal notranslate"><span class="pre">interval</span></code> の期間後)、<code class="docutils literal notranslate"><span class="pre">--margin</span></code> は余裕日数、
+<code class="docutils literal notranslate"><span class="pre">--plain</span></code> はテキスト版、<code class="docutils literal notranslate"><span class="pre">--ai</span></code> はチャットAI 用(指示 + JSON)、<code class="docutils literal notranslate"><span class="pre">-o</span></code> はファイルにも出力</p>
+</dd>
+<dt><strong>visit</strong> [<strong>-r</strong>] [<em>日付</em>]</dt><dd><p>対話シェルで以後の <code class="docutils literal notranslate"><span class="pre">report</span></code> に使う来院日を設定・表示。<code class="docutils literal notranslate"><span class="pre">-r</span></code> で今日に戻す</p>
+</dd>
+<dt><strong>next</strong> [<strong>-r</strong>] [<em>日付</em> | <em>期間</em>]</dt><dd><p>対話シェルで以後の <code class="docutils literal notranslate"><span class="pre">report</span></code> に使う次回来院日を設定・表示。<code class="docutils literal notranslate"><span class="pre">-r</span></code> で既定に戻す</p>
+</dd>
+<dt><strong>interval</strong> [<em>期間</em>]</dt><dd><p>次回来院日の既定(来院日から何日後か)を設定・表示。データベースに保存される(既定 2ヶ月)</p>
+</dd>
+</dl>
+</section>
+<section id="id10">
+<h3>保守<a class="headerlink" href="#id10" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><strong>rollover</strong> [<strong>-o</strong> <em>ディレクトリ</em>] [<em>年</em>]</dt><dd><p>年次更新。<em>年</em> の1月1日より前の記録をバックアップ・CSV に書き出して退避し、在庫を繰り越す
+(既定は昨年)。出力先の既定はデータベースと同じ場所の <code class="docutils literal notranslate"><span class="pre">archive</span></code></p>
+</dd>
+<dt><strong>import</strong> <em>odsファイル</em></dt><dd><p>スプレッドシート(eyedrop-stock.ods の形式)を取り込む</p>
+</dd>
+<dt><strong>help</strong> [<em>コマンド</em>]</dt><dd><p>コマンド一覧、またはコマンドのヘルプ</p>
+</dd>
+<dt><strong>q</strong>, <strong>quit</strong></dt><dd><p>対話シェルを終了</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="id11">
+<h2>必要本数の計算<a class="headerlink" href="#id11" title="Link to this heading"></a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>開封分残日数 = 通常期間 − (来院日 − 開封日)
+在庫残日数   = 開封分残日数 + 未開封の本数 × 通常期間
+足りない日数 = 次回来院日までの日数 − 在庫残日数
+必要本数     = ceil(足りない日数 ÷ 通常期間) + 予備1本   (マイナスは0)
+</pre></div>
+</div>
+<p>通常期間は、イレギュラーでない使い切った記録のうち直近3本の平均(整数日に四捨五入)です。</p>
+</section>
+<section id="id12">
+<h2>環境変数<a class="headerlink" href="#id12" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">EYEDROP_DB</span></code></dt><dd><p>データベースファイル(<code class="docutils literal notranslate"><span class="pre">-f</span></code> を省略したとき)。</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">XDG_DATA_HOME</span></code></dt><dd><p>既定のデータベースファイルの置き場所の基準(省略時 <code class="docutils literal notranslate"><span class="pre">~/.local/share</span></code>)。</p>
+</dd>
+</dl>
+</section>
+<section id="id13">
+<h2>ファイル<a class="headerlink" href="#id13" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">~/.local/share/eyedrop/eyedrop.db</span></code></dt><dd><p>既定のデータベースファイル(<code class="docutils literal notranslate"><span class="pre">$XDG_DATA_HOME/eyedrop/eyedrop.db</span></code>)。
+無ければフォルダごと新しく作ります。Android版のバックアップのファイルもそのまま使えます。</p>
+</dd>
+</dl>
+</section>
+<section id="id14">
+<h2>例<a class="headerlink" href="#id14" title="Link to this heading"></a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>add<span class="w"> </span>目薬A
+<span class="gp">$ </span>eyedrop<span class="w"> </span><span class="k">in</span><span class="w"> </span>目薬A<span class="w"> </span><span class="m">3</span><span class="w"> </span>-d<span class="w"> </span><span class="m">2026</span>-07-10
+<span class="gp">$ </span>eyedrop<span class="w"> </span>open<span class="w"> </span>目薬A
+<span class="gp">$ </span>eyedrop<span class="w"> </span>report<span class="w"> </span>-n<span class="w"> </span>4週間<span class="w"> </span>--plain
+<span class="gp">$ </span>eyedrop<span class="w"> </span>-f<span class="w"> </span>~/backup/eyedrop-backup-20261001.db<span class="w"> </span>report
+</pre></div>
+</div>
+</section>
+<section id="id15">
+<h2>注意<a class="headerlink" href="#id15" title="Link to this heading"></a></h2>
+<p>このツールは目薬の点眼の記録と、受診時に伝える目薬の本数の目安を出すためのものです。
+実際の処方や点眼の方法は、必ず医師の指示に従ってください。</p>
+</section>
+<section id="id16">
+<h2>関連項目<a class="headerlink" href="#id16" title="Link to this heading"></a></h2>
+<p>ドキュメント: <a class="reference external" href="https://kuma35.github.io/eyedrop/">https://kuma35.github.io/eyedrop/</a></p>
+<p>ソース: <a class="reference external" href="https://github.com/kuma35/eyedrop">https://github.com/kuma35/eyedrop</a></p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli.html" class="btn btn-neutral float-left" title="CLI版" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="estimate.html" class="btn btn-neutral float-right" title="推定のしくみ" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, kuma35.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,189 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="ja" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>推定のしくみ &mdash; 目薬管理 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/general.css?v=c0a7eb24" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/dark.css?v=70edf1c7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2a174dcd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/translations.js?v=4755f45a"></script>
+      <script src="_static/dark_mode_js/default_dark.js?v=fd565c74"></script>
+      <script src="_static/dark_mode_js/theme_switcher.js?v=358d3910"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="サンプルデータ" href="sample.html" />
+    <link rel="prev" title="eyedrop(コマンド)" href="eyedrop.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            目薬管理(eyedrop)
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="android.html">Android版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="eyedrop.html">eyedrop(コマンド)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">推定のしくみ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id2">1本あたりの日数(通常期間)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id3">必要本数</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id4">計算の例</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#id5">定数</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">目薬管理(eyedrop)</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">推定のしくみ</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="id1">
+<h1>推定のしくみ<a class="headerlink" href="#id1" title="Link to this heading"></a></h1>
+<p>Android版・CLI版とも同じ計算です。</p>
+<section id="id2">
+<h2>1本あたりの日数(通常期間)<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<p>イレギュラーでない、使い切った記録のうち <strong>直近3本の平均</strong> を整数日に四捨五入して使います。
+「平均より直近の実績のほうが実態に近い」という経験からです。</p>
+<ul class="simple">
+<li><p>途中廃棄・紛失・中断などはイレギュラーにして除外できます。
+イレギュラーが1つあれば、それより前の実績はたどりません</p></li>
+<li><p>1日の点眼回数などが変わったときは「点眼パターン変更」(CLI版は <code class="docutils literal notranslate"><span class="pre">pattern</span></code>)で直近の1本をイレギュラーにし、
+変更後の実績だけで推定します</p></li>
+<li><p>実績が1本・2本しかないときは、その1本・2本の平均を使います。実績が無いときは推定できず、必要本数は「相談」になります</p></li>
+<li><p>極端に短い記録(中央値の 0.7 倍未満)は自動で除外します</p></li>
+<li><p>開封後の廃棄期限は推定の上限にはしません。
+うっかり使い続けることもあるので、超過したら知らせるだけにしています</p></li>
+</ul>
+</section>
+<section id="id3">
+<h2>必要本数<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>開封分残日数 = 通常期間 − (来院日 − 開封日)
+在庫残日数   = 開封分残日数 + 未開封の本数 × 通常期間
+足りない日数 = 次回来院日までの日数 − 在庫残日数
+必要本数     = ceil(足りない日数 ÷ 通常期間) + 予備1本   (マイナスは0)
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>必要本数は、処方をお願いする本数です。0 は処方不要です</p></li>
+<li><p>来院日の時点で通常期間を超えて使っている1本は、残り0日として数えます。開封中の1本が無いときも0日です</p></li>
+<li><p>予備を1本見込むので、足りない日数が少しマイナス(余る)でも、1本分(通常期間)以上余らない限り必要本数は1になります</p></li>
+<li><p>1回の処方で出してもらえる本数の上限は、条件がはっきりしないので設けていません</p></li>
+</ul>
+<section id="id4">
+<h3>計算の例<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
+<p>通常期間が26日の目薬を 9/11 に開封し、来院日が 9/25、次回来院日が60日後、未開封が0本の場合:</p>
+<ul class="simple">
+<li><p>開封分残日数 = 26 − (9/25 − 9/11 = 14日) = 12日</p></li>
+<li><p>在庫残日数 = 12 + 0 × 26 = 12日</p></li>
+<li><p>足りない日数 = 60 − 12 = 48日</p></li>
+<li><p>必要本数 = 48 ÷ 26 = 1.8… を切り上げて2本、予備1本を足して <strong>3本</strong></p></li>
+</ul>
+</section>
+</section>
+<section id="id5">
+<h2>定数<a class="headerlink" href="#id5" title="Link to this heading"></a></h2>
+<p>予備・次回来院日の既定の期間は、次の定数で変えられます
+(次回来院日の既定の期間は、Android版の「設定」や CLI版の <code class="docutils literal notranslate"><span class="pre">interval</span></code> でも変えられます)。</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>定数</p></th>
+<th class="head"><p>場所</p></th>
+<th class="head"><p>既定値</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SPARE_BOTTLES</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">drugdb/estimate.py</span></code></p></td>
+<td><p>1</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DEFAULT_SPAN</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">drugdb/report.py</span></code></p></td>
+<td><p>60(日。来院日から次回来院日まで)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="eyedrop.html" class="btn btn-neutral float-left" title="eyedrop(コマンド)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sample.html" class="btn btn-neutral float-right" title="サンプルデータ" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, kuma35.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

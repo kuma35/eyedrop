@@ -368,13 +368,26 @@
   - ドキュメント(cli・sample)と README の CLI版の説明を install.sh・`eyedrop` コマンド・新しい既定のデータベースに合わせた。
     公開中の docs/v0.1.0/ は凍結のため作り直していない(次の版で出す)
 - [ ] CLI 版の配布の続き(2026-10-02 記録):
-  - [ ] user のホームに `./install.sh` でインストールして使ってみる(`eyedrop --version`・`man eyedrop`)
-  - [ ] PC の本番データ(リポジトリ直下の `eyedrop.db`、2026-09-25 で止まっている)をどうするか決める
+  - [x] user のホームに `./install.sh` でインストールして使ってみる(`eyedrop --version`・`man eyedrop`)
+    → 2026-10-02 user が実行。`~/bin/eyedrop`・`~/share/man/man1/eyedrop.1` に入り、`man -w eyedrop` で見つかる。
+    版を上げたら `./install.sh` をもう一度実行して入れ直す
+  - [x] PC の本番データ(リポジトリ直下の `eyedrop.db`、2026-09-25 で止まっている)をどうするか決める
     (`~/.local/share/eyedrop/` に移す、`-f` で使う、または使わない)
+    → 2026-10-02 リポジトリ直下の古い `eyedrop.db` ではなく、スマホの最新のバックアップ
+    `eyedrop-backup-20261002.db`(user がスマホで保存)を adb で取り込み、`~/.local/share/eyedrop/eyedrop.db` に置いた
+    (整合性チェック ok、スキーマ 6、在庫記録の最終日 2026-10-01)。インストールした `eyedrop` で読めて、
+    サマリーの数字はスマホと一致。リポジトリ直下の `eyedrop.db` はそのまま残っている(git の管理外)
   - [ ] 変更(install.sh・既定のデータベース・--version・man ページ・ドキュメント)をコミット・プッシュ
   - [ ] 版を 0.2.0 に上げるか決める。上げるなら `drugdb/__init__.py` と `mobile/pyproject.toml` の version、
     ドキュメントを `docs/v0.2.0/` にビルドしてランディングページに追加、タグ v0.2.0、Releases
     (APK も出すなら公開用の鍵で署名してビルド)
+    → 2026-10-02 0.2.0 に上げる(user の指示)。済: version 2か所、man ページ(.TH の版 0.2.0)、
+    `docs/v0.2.0/` のビルド、ランディングページ(最新版を v0.2.0 に、一覧に追加)。`docs/v0.1.0/` は変更なし。
+    APK を 0.2.0 でビルド(user、`mobile/build_release_apk.sh`)→ 署名の指紋一致・versionName 0.2.0 を確認し、
+    SH-54D に上書きインストール(本番データそのまま、自動回転 OFF のまま)。CLI も user が入れ直して `eyedrop 0.2.0`。
+    残り: プッシュ、タグ v0.2.0、Releases に APK
+  - [ ] APK の versionCode が v0.1.0 と同じ 1 のまま(flet の既定)。手で入れる分には上書きできるが、版ごとに上げるのが
+    Android の決まり。次の版から `flet build --build-number 番号` で上げる(`build_release_apk.sh` に入れる)
 
 ## Android版
 

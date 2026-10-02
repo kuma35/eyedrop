@@ -1,0 +1,213 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="ja" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>目薬管理(eyedrop) &mdash; 目薬管理 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/general.css?v=c0a7eb24" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/dark.css?v=70edf1c7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2a174dcd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/translations.js?v=4755f45a"></script>
+      <script src="_static/dark_mode_js/default_dark.js?v=fd565c74"></script>
+      <script src="_static/dark_mode_js/theme_switcher.js?v=358d3910"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="Android版" href="android.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            目薬管理(eyedrop)
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="android.html">Android版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI版</a></li>
+<li class="toctree-l1"><a class="reference internal" href="eyedrop.html">eyedrop(コマンド)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="estimate.html">推定のしくみ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">目薬管理(eyedrop)</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">目薬管理(eyedrop)</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="eyedrop">
+<h1>目薬管理(eyedrop)<a class="headerlink" href="#eyedrop" title="Link to this heading"></a></h1>
+<p>眼科の受診時に、次の受診までに必要な目薬の種類と本数を算出する
+Android アプリとコマンドライン(CLI)ツールです。</p>
+<a class="reference internal image-reference" href="_images/summary.png"><img alt="サマリー画面(Android版)" src="_images/summary.png" width="270" />
+</a>
+<section id="id1">
+<h2>経緯<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<p>複数の目薬を使っていて、ある目薬は朝・夕両方、別の目薬は夕だけなど、
+点眼パターンが違うと、目薬ごとに消費量も異なります。
+手元の在庫、目薬1本を通常何日で使い切るのか、今使っている目薬があと何日もつかを
+把握した上で、次の受診日までに何本欲しいかを伝えないと、
+ダブついたり、次の受診までに足りなくなったりします。</p>
+<p>このプログラム・アプリでは、目薬の入出庫と、使用中の目薬の残日数を管理し、
+来院日と次回来院日から、次回来院日までにそれぞれ何本の目薬が必要かを算出します。</p>
+</section>
+<section id="id2">
+<h2>できること<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>在庫管理</strong>: 入庫(処方)・出庫(開封)・棚卸しを記録し、未開封の在庫数を把握</p></li>
+<li><p><strong>ライフタイム管理</strong>: 開封日を記録し、1本が何日もつか(通常期間)を過去の実績から推定。
+いま使っている1本の推定残日数を表示</p></li>
+<li><p><strong>次回来院までに必要な本数</strong>: 来院日(既定は今日)から次回来院日
+(既定は2ヶ月後。日付や「4週間」のような期間で変更可)までに、
+処方をお願いする本数を計算し、根拠(足りない日数・在庫残日数・未開封・通常期間・開封分残日数)も表示。
+1本程度の予備を見込む</p></li>
+<li><p><strong>書き出し</strong>: Markdown・テキスト・チャットAI 用(指示 + JSON)。
+Evernote などにそのまま貼り付けられる</p></li>
+<li><p><strong>年次更新</strong>: 古い記録をバックアップ・CSV に書き出し、在庫を繰り越す</p></li>
+</ul>
+</section>
+<section id="id3">
+<h2>特徴<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>「たまたま短かった1本」や「途中で中断した1本」で推定が狂わないよう、
+イレギュラーな記録を除外できます。1日の点眼回数などが変わったときは
+「点眼パターン変更」で、それより前の実績を使わないようにできます</p></li>
+<li><p>キサラタンのように「開封後4週間で廃棄」の目安がある目薬は、
+廃棄期限を過ぎると知らせます(推定そのものは実績どおり)</p></li>
+<li><p>ヒアレインのように <strong>随時使う目薬</strong> は、必要本数を計算せず在庫だけ表示します</p></li>
+<li><p>Android版は目が悪くても見やすいよう、既定は黒地に白の高コントラストで、文字は大きめです</p></li>
+</ul>
+<p>データは Android版、CLI版それぞれに保持していて共有しません。
+Android版の変更が自動で CLI版に反映されることはありませんし、その逆もありません
+(バックアップのファイルで移すことはできます)。</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="android.html">Android版</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="android.html#id1">動作環境</a></li>
+<li class="toctree-l2"><a class="reference internal" href="android.html#id2">インストール</a></li>
+<li class="toctree-l2"><a class="reference internal" href="android.html#id3">署名の確認(フィンガープリント)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="android.html#id4">画面と使い方</a></li>
+<li class="toctree-l2"><a class="reference internal" href="android.html#id9">ビルド</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI版</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#id1">動作環境</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#id2">インストール</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#id3">データベース</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#id4">使用例</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="eyedrop.html">eyedrop(コマンド)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id1">書式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id2">説明</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id3">オプション</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id4">日付と期間</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id5">コマンド</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id11">必要本数の計算</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id12">環境変数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id13">ファイル</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id14">例</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id15">注意</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eyedrop.html#id16">関連項目</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="estimate.html">推定のしくみ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="estimate.html#id2">1本あたりの日数(通常期間)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="estimate.html#id3">必要本数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="estimate.html#id5">定数</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sample.html#cli">CLI版で使う</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sample.html#android">Android版で使う</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="id4">
+<h2>ライセンス<a class="headerlink" href="#id4" title="Link to this heading"></a></h2>
+<p>MIT License です。</p>
+</section>
+<section id="id5">
+<h2>注意<a class="headerlink" href="#id5" title="Link to this heading"></a></h2>
+<p>このツールは目薬の点眼の記録と、受診時に伝える目薬の本数の目安を出すためのものです。
+実際の処方や点眼の方法は、必ず医師の指示に従ってください。</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="android.html" class="btn btn-neutral float-right" title="Android版" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, kuma35.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

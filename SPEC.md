@@ -603,6 +603,39 @@
   - 実機で確認(2026-09-30、SH-54D): 自動回転 OFF(`accelerometer_rotation=0`)の状態から、
     `am start` で起動しても 0 のまま、`monkey` で起動すると 1(ON)に変わった。確認後 0 に戻した
 
+- [x] Android 版のアイコン(2026-10-02 user の指示: 自作)
+  - いらすとやは公式の利用規約・FAQ を確認(2026-10-02): アプリのアイコン・ロゴとしての利用は可(商標登録などで独自の権利は
+    主張できない、他の人も同じ絵を使うかもしれない)。ただし「加工の有無に関わらず素材の再配布はお断り」で、
+    公開リポジトリに画像ファイルを入れると再配布に当たるおそれがあり、MIT License との関係も紛らわしいので使わない
+  - 1案目(Claude): 黒地に、黄色のしずくが白い目に落ちる図 → ボツ(user「悪の秘密結社みたい」)
+  - 2案目(Claude): 目薬の容器のラベルに1案目の図を入れたもの → user が Claude デスクトップの Artifact で
+    手直しした `mobile/src/assets/eyedrop-bottle.svg`・`eyedrop-bottle.png`(1024x1024、背景は透明)を採用
+    (黄色のキャップ、八角形の水色の容器、白いラベルに青いしずくと紺の目)。自作なので MIT License
+  - 3案目(user、2026-10-02 採用): `mobile/src/assets/eyedrop-stock-icon.svg`・`eyedrop-stock-icon.png`
+    (2案目の目薬の容器の後ろに在庫の棚を置いた図。1024x1024、背景は透明)。自作なので MIT License。
+    2案目の `eyedrop-bottle.*` もフォルダに残す(今後それを元にするかもしれないため。user の指示)
+    → 実機で見て、目薬と棚の色が同じでわかりにくいので棚を灰色に(user の指示)。SVG の棚の9色(水色がかった灰色)を
+    同じ明るさの灰色(輝度 0.299R+0.587G+0.114B)に置き換えた(例 #4F6D8C → #686868)。容器の色はそのまま。
+    PNG は SVG をヘッドレスの Chrome で描いて作る(ImageMagick は clipPath を扱えず棚の仕切りが消える。
+    Chrome で描いた変更前の PNG は user の PNG と全画素一致):
+    `google-chrome --headless=new --disable-gpu --no-sandbox --hide-scrollbars --default-background-color=00000000
+    --window-size=1024,1024 --screenshot=out.png file://…/eyedrop-stock-icon.svg`
+  - `icon.png` は `eyedrop-stock-icon.png` のコピー(Flet が全体用に使う。余白は Flet が自動で付ける)
+  - `icon_android.png`: Android 用。Flet は `icon_android.png` があれば、余白を付けずにそのまま使う。
+    `mobile/make_android_icon.py`(Pillow)で作る: 図を囲む最小の円の中心をアイコンの中心に置き、丸く切り抜いても
+    欠けない安全な円(前景 108dp のうち直径 66dp。1024px なら半径 313px)に収まる最大の大きさにする。
+    3案目は倍率 0.786、図 477x516、最も遠い画素 306px。デザインを変えたら
+    `cd mobile && ../venv/bin/python make_android_icon.py src/assets/新しい画像.png` と `icon.png` のコピーをやり直す
+  - `mobile/pyproject.toml`: `icon_background = "#FFFFFF"`、`[tool.flet.android] adaptive_icon_background = "#FFFFFF"`
+    (1案目では黒にしていたのを白に)
+  - 作業用フォルダへの試しのビルドで、アダプティブアイコン(背景 #FFFFFF・前景が `icon_android.png`)を確認。
+    見本は、前景の中央 72dp(約67%)を切り出してから四角・角丸・丸に切り抜いて確認
+    (最初は前景全体を切り抜いていて、実際より小さく見える誤りがあった)。ホーム画面の大きさでも容器としずくはわかる
+  - [x] 実機での確認。スマホには公開用の鍵で署名した版が入っているので、user の端末で公開用の鍵で署名してビルドし、
+    上書きインストールして確認する
+    → 2026-10-02 `mobile/build_release_apk.sh`(user の端末で実行。鍵ファイル・別名・パスワードを入力プロンプトで聞き、
+    パスワードは環境変数でだけ flet に渡す。ビルド後に署名の指紋が公開用の鍵と一致するか確かめる)でビルド。
+    SH-54D に上書きインストール(本番データはそのまま、自動回転は OFF のまま)。棚を灰色にした版を user が確認して OK
 ### android-tablet-TODO ###
 
 - [x] Androidタブレットへの対応

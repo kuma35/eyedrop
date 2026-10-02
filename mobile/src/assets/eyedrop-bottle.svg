@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+<polygon points="382,394 642,394 752,504 752,774 642,884 382,884 272,774 272,504" fill="#DDEEFF" stroke="#84A9CF" stroke-width="9" stroke-linejoin="round"/>
+<polygon points="388,412 636,412 734,510 734,768 636,866 388,866 290,768 290,510" fill="#BFDDFE"/>
+<path d="M436 160 V394 H588 V160 Z" fill="#FFD700" stroke="#B89500" stroke-width="9" stroke-linejoin="round"/>
+<ellipse cx="512" cy="160" rx="76" ry="20" fill="#FFE866" stroke="#B89500" stroke-width="9"/>
+<rect x="352" y="460" width="320" height="360" rx="22" ry="22" fill="#ffffff" stroke="#84A9CF" stroke-width="9"/>
+<g transform="translate(512 640) scale(0.9) translate(-512 -682)">
+<path d="M512 530 C480 572 453 612 453 640 C453 676 479 703 512 703 C545 703 572 676 572 640 C572 612 544 572 512 530 Z" fill="#1E88E5"/>
+<ellipse cx="490" cy="646" rx="11" ry="21" fill="#ffffff"/>
+<path d="M388 790 C430 765 470 749 512 749 C554 749 594 765 636 790 C594 815 554 832 512 832 C470 832 430 815 388 790 Z" fill="none" stroke="#1A237E" stroke-width="13" stroke-linejoin="round"/>
+<circle cx="512" cy="790" r="31" fill="none" stroke="#1A237E" stroke-width="16"/>
+</g>
+</svg>

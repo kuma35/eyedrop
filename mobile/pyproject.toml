@@ -16,6 +16,11 @@ org = "io.github.kuma35"
 product = "目薬管理"
 company = "kuma35"
 copyright = "Copyright (C) 2023-2026 kuma35"
+# アイコン(src/assets/icon.png。元の図は eyedrop-bottle.svg、背景は透明)の後ろの色
+icon_background = "#FFFFFF"
+
+[tool.flet.android]
+adaptive_icon_background = "#FFFFFF"
 
 [tool.flet.app]
 path = "src"

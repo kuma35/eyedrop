@@ -25,8 +25,8 @@ from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.estimate import (estimate_days, last_days, regular_days,
                              requirement)
 from drugdb.import_ods import Cell, import_ods, import_sheet
-from drugdb.report import (make_report, need_cell, to_markdown,
-                           to_plain_text)
+from drugdb.report import (inventory_result_text, make_report, need_cell,
+                           to_markdown, to_plain_text)
 from drugdb.rollover import rollover
 
 # 開発用データ(本番のコピー)。非公開なので git 管理外。無ければスキップ
@@ -185,6 +185,30 @@ class TestDrugDb(DbTestCase):
             [1, 3, 2, 5, 4])
         self.assertEqual(self.db.balance('A', as_of='2023-02-28'), 2)
         self.assertEqual(self.db.balance('A'), 4)
+
+    def test_inventory_all(self):
+        self.db.add_drug('A')
+        self.db.add_drug('B')
+        self.db.receive('A', 3, '2026-09-01')
+        self.db.receive('B', 2, '2026-09-01')
+        self.db.receive('B', 1, '2026-10-10')
+        items = self.db.inventory_all({'A': 3, 'B': 1}, '2026-10-05', 'メモ')
+        # 記録上の本数は棚卸しの日時点(10/10 の入庫は含まない)
+        self.assertEqual([(i['name'], i['before'], i['qty']) for i in items],
+                         [('A', 3, 3), ('B', 2, 1)])
+        self.assertEqual(inventory_result_text(items),
+                         '2件を記録(うち本数の修正 1件)')
+        # 本数が同じでも棚卸しとして記録する
+        rows = self.db.stock_history('A')
+        self.assertEqual((rows[-1]['kind'], rows[-1]['stock_date'],
+                          rows[-1]['note']), ('inventory', '2026-10-05', 'メモ'))
+        self.assertEqual(self.db.balance('B'), 2)
+        # どれかが不正なら何も記録しない
+        with self.assertRaises(DrugDbError):
+            self.db.inventory_all({'A': 1, '無い薬': 1})
+        with self.assertRaises(DrugDbError):
+            self.db.inventory_all({'A': 1, 'B': -1})
+        self.assertEqual(len(self.db.stock_history('A')), 2)
 
     def test_alias_end_date(self):
         self.db.add_drug('コソプト')
@@ -1016,6 +1040,42 @@ class TestCli(DbTestCase):
             with self.assertRaises(SystemExit):
                 main(['--version'])
         self.assertEqual(out.getvalue(), f'eyedrop {__version__}\n')
+
+    def test_invall(self):
+        self.db.add_drug('A')
+        self.db.add_alias('A', 'A-generic', '2026-01-01')
+        self.db.add_drug('B')
+        self.db.add_drug('C')
+        self.db.update_drug('C', end_date='2026-01-01')
+        self.db.receive('A', 3, '2026-09-01')
+        self.db.receive('B', 2, '2026-09-01')
+
+        def run(line, answers):
+            out = io.StringIO()
+            shell = DrugDbShell(self.db, stdin=io.StringIO(answers),
+                                stdout=out)
+            with redirect_stderr(io.StringIO()):
+                shell.onecmd(line)
+            return out.getvalue(), shell.failed
+
+        # q で中止すると何も記録しない
+        out, failed = run('invall', '\nq\n')
+        self.assertFalse(failed)
+        self.assertIn('中止しました', out)
+        self.assertEqual(len(self.db.stock_history('A')), 1)
+        # 空 Enter は記録上の本数のまま。数でなければ聞き直す。使用終了の C は聞かない
+        out, failed = run('invall -d 2026-10-05 -m 来院前', '\nx\n1\n')
+        self.assertFalse(failed)
+        self.assertIn('A(現在:A-generic) [3]: ', out)
+        self.assertIn('0以上の数を入れてください', out)
+        self.assertNotIn(' C', out)
+        self.assertIn('2026-10-05 2件を記録(うち本数の修正 1件)', out)
+        self.assertIn('B: 2 → 1', out)
+        self.assertEqual(self.db.stock_history('A')[-1]['kind'], 'inventory')
+        self.assertEqual(self.db.balance('B'), 1)
+        # 入力の終わり(Ctrl-D)も中止
+        self.assertIn('中止しました', run('invall', '2\n')[0])
+        self.assertEqual(len(self.db.stock_history('A')), 2)
 
     def test_rollover_default_out_dir(self):
         db_file = self.path / 'data' / 'x.db'

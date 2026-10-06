@@ -285,6 +285,16 @@ def estimate_text(req: Requirement) -> str:
     return f'通常期間 {days} ({basis})'
 
 
+def inventory_result_text(items: list[dict]) -> str:
+    """result of DrugDb.inventory_all
+
+    JP:
+    一括棚卸しの結果。例: 「4件を記録(うち本数の修正 2件)」。
+    """
+    changed = sum(1 for item in items if item['qty'] != item['before'])
+    return f'{len(items)}件を記録(うち本数の修正 {changed}件)'
+
+
 def _md_cell(value) -> str:
     """escape text for markdown table cell"""
     return str(value).replace('|', '\\|').replace('\n', ' ')

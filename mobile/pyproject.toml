@@ -1,6 +1,6 @@
 [project]
 name = "eyedrop"
-version = "0.2.0"
+version = "0.3.0"
 description = "目薬の在庫・ライフタイム管理と来院時必要本数の申告(スマホ版)"
 readme = "../QIITA.md"
 requires-python = ">=3.10"

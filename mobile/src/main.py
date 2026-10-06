@@ -15,6 +15,10 @@ drugdb パッケージを PC 版と共通で使います。
 - 目薬: 開封・入庫・棚卸し。薬ごとの履歴と設定
 - 設定: バックアップ・復元・年次更新・次回来院日の既定の期間・表示テーマ
 
+左上のメニュー(ハンバーガーメニュー)から、名前の表示の切り替え、
+一括棚卸し(来院前に使用中の目薬をまとめて数え直す画面。記録するとサマリーへ)、
+サマリーのコピー。
+
 目が悪くても見やすいよう、既定は黒地に白の高コントラストで文字は大きめ。
 """
 import os
@@ -29,8 +33,9 @@ from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
 from drugdb.report import (DEFAULT_SPAN, NAME_HEAD, SPAN_UNITS, basis_cells,
-                           get_default_span, line_name, make_report,
-                           need_cell, notices, opened_text, remaining_text,
+                           get_default_span, inventory_result_text,
+                           line_name, make_report, need_cell, notices,
+                           opened_text, remaining_text,
                            set_default_span, span_label, span_to_unit,
                            to_markdown, to_plain_text, unit_to_span)
 from drugdb.rollover import rollover
@@ -68,6 +73,10 @@ OLD_FONT_SCALES = {'標準': 1.0, '大': 1.25, '特大': 1.5}
 BASE_SIZE = 18
 # 上部バーの文字は倍率に関係なく固定(大きくしてもボタンがはみ出さない)
 TOPBAR_SIZE = 22
+
+# 一括棚卸しの「－」「＋」と本数の文字の倍率の上限。これより大きくすると
+# スマホの幅に1行で収まらず「＋」がはみ出す(SH-54D で 250% のとき)
+BULK_MAX_SCALE = 1.5
 
 # 表の罫線の太さ
 TABLE_LINE_WIDTH = 1
@@ -198,6 +207,9 @@ class EyedropApp:
         self.tab = 0
         self.detail_drug: Optional[int] = None  # 目薬タブで詳細表示中の薬
         self.show_ended = False  # 目薬タブで利用終了した目薬も表示
+        # 一括棚卸しの画面を表示中なら {'date': 日付, 'counts': {drug_id: 本数}}。
+        # 文字の大きさを変えて作り直しても入力中の本数が消えないようここに持つ
+        self.bulk: Optional[dict] = None
         # サマリーの来院日・次回来院日(None なら今日・来院日 + 既定の期間)。
         # アプリを閉じると既定に戻る
         self.visit_date: Optional[date] = None
@@ -343,12 +355,16 @@ class EyedropApp:
                 height=72, on_click=handler)
 
         # ハンバーガーメニュー: 名前の表示を画面内一斉に切り替える。
+        # 一括棚卸し(来院の直前にだけ使うので目薬タブには出さない)。
         # サマリーのコピー(受診時はアプリを見せればよいのでボタンは画面に出さない。
         # Evernote Web は Markdown を認識、 Android アプリはテキストのまま)
         menu = ft.PopupMenuButton(
             icon=ft.Icons.MENU, icon_size=32, tooltip='メニュー',
             items=[menu_item('代表目薬名で表示(例: コソプト)', 'representative'),
                    menu_item('目薬名で表示(例: ドルモロール)', 'actual'),
+                   ft.PopupMenuItem(),  # 区切り線
+                   action_item('一括棚卸し', ft.Icons.INVENTORY,
+                               lambda e: self.show_bulk_inventory()),
                    ft.PopupMenuItem(),  # 区切り線
                    # アイコン付きの項目は折り返されないので2行に分ける
                    action_item('サマリーを\nMarkdown でコピー',
@@ -425,22 +441,33 @@ class EyedropApp:
         """navigation bar changed"""
         self.tab = e.control.selected_index
         self.detail_drug = None
+        self.bulk = None
         self.refresh()
+
+    def set_tab(self, index: int):
+        """switch tab from code (also updates navigation bar)"""
+        self.tab = index
+        self.detail_drug = None
+        self.bulk = None
+        if self.page is not None:
+            self.page.navigation_bar.selected_index = index
 
     def refresh(self):
         """rebuild current tab
 
         JP:
-        現在のタブを作り直して表示する。
+        現在のタブを作り直して表示する。一括棚卸しの画面はタブより優先。
         """
         builders = [self.build_summary, self.build_drugs, self.build_data]
-        if self.tab == 1 and self.detail_drug is not None:
+        if self.bulk is not None:
+            controls = self.build_bulk_inventory()
+        elif self.tab == 1 and self.detail_drug is not None:
             controls = self.build_detail(self.detail_drug)
         else:
             controls = builders[self.tab]()
         # 縦スクロールバーが内容に重ならないよう右に余白
-        # 画面(タブ・詳細)が変わったら先頭から表示する
-        view = (self.tab, self.detail_drug)
+        # 画面(タブ・詳細・一括棚卸し)が変わったら先頭から表示する
+        view = (self.tab, self.detail_drug, self.bulk is not None)
         scroll_top = view != getattr(self, '_view', view)
         self._view = view
         self.body.controls = [ft.Container(
@@ -958,6 +985,152 @@ class EyedropApp:
             '「詳細」の「目薬を追加」で追加します。', 0.9)
         self.ask('目薬追加(代表目薬名の追加)',
                  [note, name, actual, max_days, as_needed_row], '追加', ok)
+
+    # ------------------------------------------------------------ 一括棚卸し
+    def show_bulk_inventory(self, day: Optional[date] = None):
+        """show bulk stocktaking screen
+
+        JP:
+        一括棚卸しの画面を出す(ハンバーガーメニューから)。本数は記録上の
+        未開封の本数(day の時点。省略時今日)から始める。
+        """
+        self.bulk = {'date': day or date.today(), 'counts': {}, 'memo': None}
+        self.refresh()
+
+    def set_bulk_date(self, day: date):
+        """change date of bulk stocktaking
+
+        JP:
+        一括棚卸しの日付を変える。本数はその日時点の記録上の本数に戻す。
+        """
+        self.bulk.update(date=day, counts={})
+        self.refresh()
+
+    def bulk_row(self, drug_id: int, before: int) -> ft.Control:
+        """one drug of bulk stocktaking with large -/+ buttons
+
+        JP:
+        一括棚卸しの1行(目薬1つ)。大きな「－」「＋」で実際の本数に合わせる。
+        押すたびに画面全体は作り直さず、この行だけ更新する(スクロール位置を保つ)。
+        記録上の本数と違うときはそれが分かるように色と文言を変える。
+        """
+        counts = self.bulk['counts']
+        # 「－」「＋」と本数は倍率に上限を付ける(BULK_MAX_SCALE)
+        limit = min(1.0, BULK_MAX_SCALE / self.scale)
+        count = self.text(counts[drug_id], 2.0 * limit, bold=True)
+        note = self.text('', 0.85)
+
+        def step_button(label: str, delta: int) -> ft.Control:
+            return ft.FilledButton(
+                content=self.text(label, 1.8 * limit, bold=True),
+                tooltip='1本減らす' if delta < 0 else '1本増やす',
+                style=ft.ButtonStyle(padding=ft.Padding.symmetric(
+                    horizontal=24, vertical=8)),
+                on_click=lambda e: step(delta))
+
+        minus = step_button('－', -1)
+        plus = step_button('＋', 1)
+        row = ft.Row(spacing=16,
+                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                     controls=[minus, ft.Container(
+                         content=count, width=self.size(3.0 * limit),
+                         alignment=ft.Alignment.CENTER), plus])
+
+        def show():
+            value = counts[drug_id]
+            count.value = str(value)
+            changed = value != before
+            count.color = ft.Colors.SECONDARY if changed else None
+            note.value = (f'記録上 {before}本 → {value}本に修正' if changed
+                          else f'記録上 {before}本(同じ)')
+            note.color = ft.Colors.SECONDARY if changed else None
+            minus.disabled = value <= 0
+
+        def step(delta: int):
+            counts[drug_id] = max(0, counts[drug_id] + delta)
+            show()
+            if self.page is not None:
+                card.update()
+
+        show()
+        card = ft.Card(content=ft.Container(
+            padding=ft.Padding.all(12),
+            content=ft.Column(spacing=8, controls=[
+                self.text(self.drug_label(drug_id), 1.2, bold=True),
+                note, row])))
+        return card
+
+    def build_bulk_inventory(self) -> list[ft.Control]:
+        """bulk stocktaking screen
+
+        JP:
+        一括棚卸し: 使用中の目薬を1画面に並べ、未開封の本数を数え直す。
+        日付は1つ(既定は今日)。「記録」で、本数が同じ目薬も含めてすべてを
+        棚卸しとして記録し(最後に数えて確かめた日が履歴に残る)、サマリーへ。
+        """
+        bulk = self.bulk
+        day = bulk['date']
+        counts = bulk['counts']
+        drugs = self.db.list_drugs(active_only=True)
+        rows = []
+        for drug in drugs:
+            drug_id = drug['drug_id']
+            before = self.db.balance(drug_id, as_of=day)
+            counts.setdefault(drug_id, before)
+            rows.append(self.bulk_row(drug_id, before))
+        # 最後の目薬のカードのすぐ下にあるので、その目薬へのコメントと
+        # 紛れないよう一括棚卸し全体のコメントだと分かる名前と説明にする
+        memo = self.memo_field()
+        memo.label = '一括棚卸しコメント(任意)'
+        memo.value = bulk['memo']
+
+        def on_memo(e):
+            bulk['memo'] = e.control.value
+
+        memo.on_change = on_memo
+
+        def record(_e):
+            def ok():
+                items = self.db.inventory_all(
+                    {d['drug_id']: counts[d['drug_id']] for d in drugs},
+                    day, memo_value(memo))
+                self.set_tab(0)
+                return f'一括棚卸し: {inventory_result_text(items)}'
+            self.run(ok)
+
+        def cancel(_e):
+            self.bulk = None
+            self.refresh()
+
+        controls = [
+            ft.Row(controls=[
+                ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_size=32,
+                              tooltip='やめる', on_click=cancel),
+                self.text('一括棚卸し', 1.3, bold=True)]),
+            self.text('使用中の目薬の未開封の本数を数えて、「－」「＋」で'
+                      '実際の本数に合わせます。最初は記録上の本数です。'
+                      '「記録」で、本数が同じ目薬も含めてすべてを棚卸しとして'
+                      '記録し、サマリーを表示します。'
+                      '日付を変えると本数はその日の記録上の本数に戻ります。',
+                      0.9),
+            self.summary_date_button(f'日付 {day.isoformat()}', day,
+                                     self.set_bulk_date),
+            *rows]
+        if not drugs:
+            controls.append(self.text('使用中の目薬がありません。'))
+        controls += [
+            self.text('一括棚卸しコメント: 上のすべての目薬の棚卸しの記録に'
+                      '同じコメントが入ります', 0.85),
+            memo,
+            ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
+                ft.FilledButton(content=self.text(f'記録({len(drugs)}件)'),
+                                icon=ft.Icons.CHECK, on_click=record,
+                                disabled=not drugs,
+                                style=ft.ButtonStyle(
+                                    padding=ft.Padding.all(14))),
+                self.button('やめる', cancel, icon=ft.Icons.CLOSE,
+                            filled=False)])]
+        return controls
 
     # ------------------------------------------------------------ 詳細
     def build_detail(self, drug_id: int) -> list[ft.Control]:

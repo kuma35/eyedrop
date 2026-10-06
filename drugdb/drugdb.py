@@ -332,6 +332,33 @@ class DrugDb():
         """
         return self.add_stock(key, 'inventory', qty, stock_date, note)
 
+    def inventory_all(self, counts: dict, stock_date=None,
+                      note=None) -> list[dict]:
+        """stocktaking of several drugs at once
+
+        JP:
+        一括棚卸し。 counts は {薬(drug_id など): 本数}。すべての薬を同じ日付で
+        棚卸しとして記録する(本数が記録と同じでも「数えて確かめた」記録として残す)。
+        1つのトランザクションで記録し、どれかが不正なら何も記録しない。
+        戻り値は薬ごとの {'drug_id', 'name', 'before'(その日時点の記録上の本数),
+        'qty'} のリスト(counts の順)。
+        """
+        day = iso(stock_date)
+        items = []
+        for key, qty in counts.items():
+            if qty < 0:
+                raise DrugDbError(f'数量が負です: {qty}')
+            drug = self.find_drug(key)
+            items.append({'drug_id': drug['drug_id'], 'name': drug['name'],
+                          'before': self.balance(drug['drug_id'], as_of=day),
+                          'qty': qty})
+        with self.conn:
+            for item in items:
+                self.conn.execute(E.NEW_STOCK, {
+                    'drug_id': item['drug_id'], 'stock_date': day,
+                    'kind': 'inventory', 'qty': item['qty'], 'note': note})
+        return items
+
     def delete_stock(self, stock_id: int):
         """delete stock record (for correction)
 

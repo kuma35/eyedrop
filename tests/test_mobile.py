@@ -222,6 +222,66 @@ class TestMobileScreens(unittest.TestCase):
         # 代表目薬名ごとの利用終了は目薬タブのカードにある
         self.assertIn('利用終了', text)
 
+    def test_bulk_inventory(self):
+        app = self.app
+        db = app.db
+        a_id = db.find_drug('A')['drug_id']
+        c_id = db.find_drug('C')['drug_id']
+        menu = app.build_topbar().leading
+        self.assertIn('一括棚卸し', self.texts(menu.items))
+        app.tab = 1
+        app.show_bulk_inventory()
+        text = self.texts(app.build_bulk_inventory())
+        self.assertIn('一括棚卸し', text)
+        self.assertIn('記録上 0本(同じ)', text)
+        self.assertIn('記録上 2本(同じ)', text)
+        self.assertIn('記録(2件)', text)
+        self.assertIn('一括棚卸しコメント', text)
+        self.assertEqual(app.bulk['counts'], {a_id: 0, c_id: 2})
+        # 「＋」「－」は行だけ更新し、0本より減らさない
+        card = app.bulk_row(c_id, 2)
+        plus = card.content.content.controls[2].controls[2]
+        minus = card.content.content.controls[2].controls[0]
+        plus.on_click(None)
+        self.assertEqual(app.bulk['counts'][c_id], 3)
+        self.assertIn('記録上 2本 → 3本に修正', self.texts([card]))
+        for _ in range(5):
+            minus.on_click(None)
+        self.assertEqual(app.bulk['counts'][c_id], 0)
+        self.assertTrue(minus.disabled)
+        app.bulk['counts'][c_id] = 1
+        # 作り直しても入力中の本数は残る
+        controls = app.build_bulk_inventory()
+        self.assertIn('記録上 2本 → 1本に修正', self.texts(controls))
+        record = controls[-1].controls[0]
+        record.on_click(None)
+        # 記録するとサマリーへ
+        self.assertIsNone(app.bulk)
+        self.assertEqual(app.tab, 0)
+        self.assertEqual(db.balance('C'), 1)
+        self.assertEqual(db.stock_history('A')[-1]['kind'], 'inventory')
+        # 日付を変えると本数はその日の記録上の本数に戻る
+        app.show_bulk_inventory(date(2025, 12, 31))
+        app.bulk['counts'][c_id] = 5
+        app.set_bulk_date(date(2026, 1, 1))
+        self.assertEqual(app.bulk['counts'][c_id], 2)
+        # 文字を大きくしても「－」「＋」と本数は BULK_MAX_SCALE で頭打ち
+        app.db.set_meta('font_scale', '2.5')
+        row = app.bulk_row(c_id, 2).content.content.controls[2]
+        app.db.set_meta('font_scale', '1.5')
+        same = app.bulk_row(c_id, 2).content.content.controls[2]
+        self.assertEqual(row.controls[0].content.size,
+                         same.controls[0].content.size)
+        self.assertEqual(row.controls[1].width, same.controls[1].width)
+        app.db.set_meta('font_scale', '1.0')
+        small = app.bulk_row(c_id, 2).content.content.controls[2]
+        self.assertLess(small.controls[0].content.size,
+                        same.controls[0].content.size)
+        # やめると何も記録せず元の画面へ
+        app.build_bulk_inventory()[0].controls[0].on_click(None)
+        self.assertIsNone(app.bulk)
+        self.assertEqual(db.balance('C'), 1)
+
     def test_name_mode(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
         self.assertEqual(self.app.name_mode, 'representative')

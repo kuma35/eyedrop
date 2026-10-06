@@ -38,9 +38,10 @@ from . import __version__
 from .drugdb import DRUG_COLUMNS, DrugDb, DrugDbError
 from .ai_export import to_ai_prompt
 from .import_ods import import_ods
-from .report import (estimate_text, get_default_span, make_report,
-                     opened_text, parse_span, set_default_span, span_label,
-                     to_markdown, to_plain_text)
+from .report import (estimate_text, get_default_span,
+                     inventory_result_text, make_report, opened_text,
+                     parse_span, set_default_span, span_label, to_markdown,
+                     to_plain_text)
 from .rollover import rollover
 
 APP_NAME = 'eyedrop'
@@ -181,8 +182,8 @@ class DrugDbShell(Cmd):
     intro = '目薬管理 (help でコマンド一覧、 q で終了)'
     prompt = 'eyedrop> '
 
-    def __init__(self, db: DrugDb, stdout=None):
-        super().__init__(stdout=stdout)
+    def __init__(self, db: DrugDb, stdin=None, stdout=None):
+        super().__init__(stdin=stdin, stdout=stdout)
         self.db = db
         self.failed = False
         # 来院日(None なら今日)と次回来院日(None なら来院日 + 既定の期間)。
@@ -351,6 +352,56 @@ class DrugDbShell(Cmd):
     def do_inv(self, args):
         """棚卸し(未開封の在庫数を qty とする)"""
         self.db.inventory(args.drug, args.qty, args.date, args.memo)
+
+    def ask_qty(self, label: str, default: int) -> Optional[int]:
+        """ask count, blank keeps default, None on q or EOF
+
+        JP:
+        本数を聞く。空 Enter なら default、 q または入力の終わり(Ctrl-D)なら
+        None(中止)。数でなければ聞き直す。
+        """
+        while True:
+            self.stdout.write(f'{label} [{default}]: ')
+            self.stdout.flush()
+            line = self.stdin.readline()
+            if not line:
+                self.print()
+                return None
+            text = line.strip()
+            if text.lower() == 'q':
+                return None
+            if not text:
+                return default
+            if text.isdigit():
+                return int(text)
+            self.print('  0以上の数を入れてください(空 Enter で記録上の本数のまま、'
+                       'q で中止)')
+
+    @command(DATE, MEMO)
+    def do_invall(self, args):
+        """一括棚卸し(使用中の目薬を順に聞く。空 Enter で記録上の本数のまま、q で中止)"""
+        day = args.date or date.today()
+        counts = {}
+        for drug in self.db.list_drugs(active_only=True):
+            drug_id = drug['drug_id']
+            name = self.db.current_name(drug_id)
+            label = drug['name'] + ('' if name == drug['name']
+                                    else f'(現在:{name})')
+            qty = self.ask_qty(f'{drug_id:3} {label}',
+                               self.db.balance(drug_id, as_of=day))
+            if qty is None:
+                self.print('中止しました(何も記録していません)')
+                return
+            counts[drug_id] = qty
+        if not counts:
+            self.print('使用中の目薬がありません')
+            return
+        items = self.db.inventory_all(counts, day, args.memo)
+        self.print(f'{day} {inventory_result_text(items)}')
+        for item in items:
+            if item['qty'] != item['before']:
+                self.print(f"  {item['name']}: {item['before']} → "
+                           f"{item['qty']}")
 
     @command(DRUG)
     def do_stock(self, args):

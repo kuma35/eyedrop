@@ -1046,6 +1046,16 @@ Claude の提案(2026-10-05。検討のみ、実装は指示待ち)→私(user)�
   - images/ の summary・stock・drugs・detail を上書きし、bulk.png(一括棚卸し。キサラタンを＋1して「修正」表示)を追加。
     来院日 2026-10-06、次回来院日 2027-02-03(120日後)
   - README.md の画像の表と document/android.rst の一括棚卸しの節に bulk.png を追加
+- [x] v0.3.0 の公開(2026-10-06、user の指示)
+  - man/eyedrop.1 を 0.3.0 で作り直し(invall を追加。`groff -k -ww` で幅 80・90 の警告 0)
+  - `docs/v0.3.0/` をビルドし、ランディングページの最新版を v0.3.0 に(一覧に「一括棚卸し、下のタブの文字の大きさ」)。
+    `docs/v0.2.0/`・`docs/v0.1.0/` は変更なし。ヘッドレスの Chrome でランディングページを確認
+  - プッシュ、タグ v0.3.0(軽量タグ。v0.2.0 に合わせた)、Releases https://github.com/kuma35/eyedrop/releases/tag/v0.3.0 に
+    `eyedrop.apk` を添付(Latest)。APK は user が `build_release_apk.sh` で 13:10 にビルドしたもの
+    (公開用の鍵の指紋一致、versionName 0.3.0・versionCode 300、中身は最新のソース、DB なし。
+    ファイルの SHA-256 a9ce8add6881fd62f52bcd819520fb590b4abe078019c36bcddccfa7c8a08eb4、
+    Releases からダウンロードしたものと一致)。データの形式は v0.2.0 と同じ(スキーマの変更なし)とリリースノートに記載
+  - GitHub Pages に v0.3.0 が出たことを確認(v0.3.0/android.html・_images/bulk.png が 200、ランディングページの最新版も v0.3.0)
     - 見込み(SH-54D、幅 約393dp): 100%・125% はアイコン + ラベル、150%「サマリ」「目薬」「一括棚」「設定」、
       175%・200%「サマ」「目薬」「一括」「設定」、250%「サ」「目」「一」「設」
   - 目薬タブの先頭に「まとめて棚卸し」ボタン。使用中の目薬を1画面に並べ、各行に記録上の未開封の本数を最初から入れておき、

@@ -10,6 +10,7 @@ from datetime import date, timedelta
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 try:
@@ -229,13 +230,15 @@ class TestMobileScreens(unittest.TestCase):
         c_id = db.find_drug('C')['drug_id']
         menu = app.build_topbar().leading
         self.assertIn('一括棚卸し', self.texts(menu.items))
+        # メニューはタブへのショートカット
         app.tab = 1
         app.show_bulk_inventory()
+        self.assertEqual(app.tab, self.main.TAB_BULK)
         text = self.texts(app.build_bulk_inventory())
         self.assertIn('一括棚卸し', text)
         self.assertIn('記録上 0本(同じ)', text)
         self.assertIn('記録上 2本(同じ)', text)
-        self.assertIn('記録(2件)', text)
+        self.assertIn('棚卸し実行(2件)', text)
         self.assertIn('一括棚卸しコメント', text)
         self.assertEqual(app.bulk['counts'], {a_id: 0, c_id: 2})
         # 「＋」「－」は行だけ更新し、0本より減らさない
@@ -277,10 +280,100 @@ class TestMobileScreens(unittest.TestCase):
         small = app.bulk_row(c_id, 2).content.content.controls[2]
         self.assertLess(small.controls[0].content.size,
                         same.controls[0].content.size)
-        # やめると何も記録せず元の画面へ
-        app.build_bulk_inventory()[0].controls[0].on_click(None)
+        # 「記録上の本数に戻す」は入力を初めに戻す(日付はそのまま)
+        app.bulk['counts'][c_id] = 5
+        app.bulk['memo'] = 'x'
+        app.build_bulk_inventory()[-1].controls[1].on_click(None)
+        self.assertEqual(app.bulk['counts'][c_id], 2)
+        self.assertIsNone(app.bulk['memo'])
+        self.assertEqual(app.bulk['date'], date(2026, 1, 1))
+
+        # 入力を変えたまま(実行せず)ほかのタブに移ろうとすると留まる
+        class Event:  # pylint: disable=too-few-public-methods
+            """fake navigation bar event"""
+            def __init__(self, index):
+                self.control = type('Bar', (), {'selected_index': index})
+
+        app.build_bulk_inventory()
+        self.assertFalse(app.bulk_dirty())
+        app.bulk['counts'][c_id] = 4
+        self.assertTrue(app.bulk_dirty())
+        app.on_tab(Event(self.main.TAB_DATA))
+        self.assertEqual(app.tab, self.main.TAB_BULK)
+        self.assertEqual(app.bulk['counts'][c_id], 4)
+        # メニューのショートカットも入力を消さない
+        app.show_bulk_inventory()
+        self.assertEqual(app.bulk['counts'][c_id], 4)
+        # コメントだけでも留まる
+        app.bulk['counts'][c_id] = 2
+        self.assertFalse(app.bulk_dirty())
+        app.bulk['memo'] = 'x'
+        self.assertTrue(app.bulk_dirty())
+        app.bulk['memo'] = ' '
+        # 警告ダイアログは「留まる」を強調(右・塗りつぶし)
+        app.bulk['counts'][c_id] = 4
+        page = app.page = mock.Mock(width=393)
+        try:
+            self.assertFalse(app.confirm_leave_bulk(lambda: None))
+        finally:
+            app.page = None
+        dialog = page.show_dialog.call_args[0][0]
+        self.assertEqual([type(a) for a in dialog.actions],
+                         [ft.TextButton, ft.FilledButton])
+        self.assertEqual([a.content.value for a in dialog.actions],
+                         ['構わず移動', '留まる'])
+        app.bulk['counts'][c_id] = 2
+        # 入力が記録上のままなら確認せずに移り、入力を捨てる。戻ると今日から
+        app.on_tab(Event(self.main.TAB_DATA))
+        self.assertEqual(app.tab, self.main.TAB_DATA)
         self.assertIsNone(app.bulk)
+        app.set_tab(self.main.TAB_BULK)
+        self.assertEqual(app.bulk['date'], date.today())
         self.assertEqual(db.balance('C'), 1)
+        # 設定のタブは右端
+        self.assertEqual(self.main.TAB_DATA, 3)
+
+    def test_nav_layout(self):
+        nav_layout = self.main.nav_layout
+        # SH-54D(幅 約393dp)
+        self.assertEqual(nav_layout(393, 1.0),
+                         ('icon', ['サマリー', '目薬', '一括棚卸し', '設定'],
+                          12))
+        self.assertEqual(nav_layout(393, 1.25)[0], 'icon')
+        self.assertEqual(nav_layout(393, 1.5)[:2],
+                         ('text', ['サマリ', '目薬', '一括棚', '設定']))
+        self.assertEqual(nav_layout(393, 2.0)[1], ['サマ', '目薬', '一括', '設定'])
+        self.assertEqual(nav_layout(393, 2.5)[1], ['サ', '目', '一', '設'])
+        # タブレットは広いので長く出せる
+        self.assertEqual(nav_layout(800, 2.5)[0], 'icon')
+        self.assertEqual(nav_layout(600, 2.5)[1],
+                         ['サマリ', '目薬', '一括棚', '設定'])
+        # 1文字も入らないほど狭いときはタブの幅まで小さくする
+        mode, labels, size = nav_layout(200, 2.5)
+        self.assertEqual((mode, labels[0]), ('text', 'サ'))
+        self.assertLessEqual(size, 200 / 4)
+        # 幅が分からないときは既定の幅
+        self.assertEqual(nav_layout(None, 1.0)[0], 'icon')
+
+    def test_navigation_bar(self):
+        app = self.app
+        app.tab = self.main.TAB_BULK
+        bar = app.build_navigation_bar()
+        self.assertEqual(bar.selected_index, self.main.TAB_BULK)
+        self.assertEqual([d.label for d in bar.destinations],
+                         ['サマリー', '目薬', '一括棚卸し', '設定'])
+        self.assertEqual(bar.destinations[0].icon.size, 24)
+        self.assertIsNone(bar.height)
+        self.assertEqual(app._nav_height, 80)
+        app.db.set_meta('font_scale', '2.5')
+        bar = app.build_navigation_bar()
+        self.assertEqual(bar.label_behavior,
+                         ft.NavigationBarLabelBehavior.ALWAYS_HIDE)
+        self.assertEqual([d.icon.value for d in bar.destinations],
+                         ['サ', '目', '一', '設'])
+        # 長押しで省略しない名前
+        self.assertEqual(bar.destinations[2].tooltip, '一括棚卸し')
+        self.assertGreater(app._nav_height, 80)
 
     def test_name_mode(self):
         drug_id = self.app.db.find_drug('A')['drug_id']

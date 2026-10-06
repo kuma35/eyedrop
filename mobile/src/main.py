@@ -13,11 +13,11 @@ drugdb パッケージを PC 版と共通で使います。
 - サマリー: 来院日・次回来院日と、次回来院までに必要な本数(と根拠)・目薬在庫の表。
   メニューから Markdown 等でコピー
 - 目薬: 開封・入庫・棚卸し。薬ごとの履歴と設定
+- 一括棚卸し: 来院前に使用中の目薬をまとめて数え直す。棚卸し実行でサマリーへ
 - 設定: バックアップ・復元・年次更新・次回来院日の既定の期間・表示テーマ
 
 左上のメニュー(ハンバーガーメニュー)から、名前の表示の切り替え、
-一括棚卸し(来院前に使用中の目薬をまとめて数え直す画面。記録するとサマリーへ)、
-サマリーのコピー。
+一括棚卸し(タブへのショートカット)、サマリーのコピー。
 
 目が悪くても見やすいよう、既定は黒地に白の高コントラストで文字は大きめ。
 """
@@ -77,6 +77,18 @@ TOPBAR_SIZE = 22
 # 一括棚卸しの「－」「＋」と本数の文字の倍率の上限。これより大きくすると
 # スマホの幅に1行で収まらず「＋」がはみ出す(SH-54D で 250% のとき)
 BULK_MAX_SCALE = 1.5
+
+# 下のタブの並び(設定は右端)
+TAB_SUMMARY, TAB_DRUGS, TAB_BULK, TAB_DATA = range(4)
+NAV_TABS = (('サマリー', ft.Icons.SUMMARIZE), ('目薬', ft.Icons.WATER_DROP),
+            ('一括棚卸し', ft.Icons.FACT_CHECK), ('設定', ft.Icons.SETTINGS))
+# 下のタブのラベルとアイコンの大きさ(倍率 100% のとき。Material 3 の既定)
+NAV_LABEL_SIZE = 12
+NAV_ICON_SIZE = 24
+# 下のタブ1つの幅のうち文字に使えない分(左右の余白)
+NAV_TAB_PADDING = 12
+# 画面の幅が分からないとき(テスト)の幅(dp)
+NAV_DEFAULT_WIDTH = 400
 
 # 表の罫線の太さ
 TABLE_LINE_WIDTH = 1
@@ -157,6 +169,28 @@ def device_default_scale(width, height) -> float:
     return DEFAULT_SCALE
 
 
+def nav_layout(width, scale: float) -> tuple[str, list[str], float]:
+    """layout of bottom tabs by screen width and font scale
+
+    JP:
+    下のタブの表示を決める。戻り値は (形, ラベル, 文字の大きさ)。
+    全部のラベルが1つのタブの幅に入る間は 'icon'(アイコン + ラベル。
+    倍率に合わせて大きくする)。入らなくなったら 'text'(アイコンをやめて
+    文字だけ。アプリの文字と同じ大きさで、入る文字数で先頭から切る。
+    例: 「サマ」「目薬」「一括」「設定」→「サ」「目」「一」「設」)。
+    日本語は1文字の幅がほぼ文字の大きさと同じとして数える。
+    """
+    labels = [label for label, _icon in NAV_TABS]
+    tab = (width or NAV_DEFAULT_WIDTH) / len(NAV_TABS) - NAV_TAB_PADDING
+    label_size = NAV_LABEL_SIZE * scale
+    if max(len(label) for label in labels) * label_size <= tab:
+        return 'icon', labels, label_size
+    # 1文字も入らないほど大きいときはタブの幅に合わせて小さくする
+    size = min(BASE_SIZE * scale, tab)
+    count = max(1, int(tab // size))
+    return 'text', [label[:count] for label in labels], size
+
+
 def memo_value(field: ft.TextField) -> Optional[str]:
     """comment text or None if blank"""
     return (field.value or '').strip() or None
@@ -207,8 +241,9 @@ class EyedropApp:
         self.tab = 0
         self.detail_drug: Optional[int] = None  # 目薬タブで詳細表示中の薬
         self.show_ended = False  # 目薬タブで利用終了した目薬も表示
-        # 一括棚卸しの画面を表示中なら {'date': 日付, 'counts': {drug_id: 本数}}。
-        # 文字の大きさを変えて作り直しても入力中の本数が消えないようここに持つ
+        # 一括棚卸しのタブを表示中なら {'date': 日付, 'counts': {drug_id: 本数},
+        # 'memo': コメント}。文字の大きさを変えて作り直しても入力中の本数が
+        # 消えないようここに持つ。ほかのタブに移ると捨てる
         self.bulk: Optional[dict] = None
         # サマリーの来院日・次回来院日(None なら今日・来院日 + 既定の期間)。
         # アプリを閉じると既定に戻る
@@ -355,7 +390,7 @@ class EyedropApp:
                 height=72, on_click=handler)
 
         # ハンバーガーメニュー: 名前の表示を画面内一斉に切り替える。
-        # 一括棚卸し(来院の直前にだけ使うので目薬タブには出さない)。
+        # 一括棚卸し(タブへのショートカット)。
         # サマリーのコピー(受診時はアプリを見せればよいのでボタンは画面に出さない。
         # Evernote Web は Markdown を認識、 Android アプリはテキストのまま)
         menu = ft.PopupMenuButton(
@@ -363,7 +398,7 @@ class EyedropApp:
             items=[menu_item('代表目薬名で表示(例: コソプト)', 'representative'),
                    menu_item('目薬名で表示(例: ドルモロール)', 'actual'),
                    ft.PopupMenuItem(),  # 区切り線
-                   action_item('一括棚卸し', ft.Icons.INVENTORY,
+                   action_item('一括棚卸し', ft.Icons.FACT_CHECK,
                                lambda e: self.show_bulk_inventory()),
                    ft.PopupMenuItem(),  # 区切り線
                    # アイコン付きの項目は折り返されないので2行に分ける
@@ -415,16 +450,8 @@ class EyedropApp:
         self.share = ft.Share()
         self.clipboard = ft.Clipboard()
         self.picker = ft.FilePicker()
-        page.navigation_bar = ft.NavigationBar(
-            selected_index=0, on_change=self.on_tab,
-            destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.SUMMARIZE,
-                                            label='サマリー'),
-                ft.NavigationBarDestination(icon=ft.Icons.WATER_DROP,
-                                            label='目薬'),
-                ft.NavigationBarDestination(icon=ft.Icons.SETTINGS,
-                                            label='設定'),
-            ])
+        # 下のタブは refresh で作る(文字の大きさと画面の幅で変わる)
+        page.on_resize = self.on_resize
         page.add(ft.SafeArea(content=self.body, expand=True))
         self.refresh()
         if self.fixed_stale:
@@ -437,37 +464,129 @@ class EyedropApp:
         self.page.theme_mode = (ft.ThemeMode.LIGHT if mode == 'light'
                                 else ft.ThemeMode.DARK)
 
+    def on_resize(self, _e):
+        """screen size changed (rotation etc.)
+
+        JP:
+        画面の幅が変わったら(回転など)下のタブだけ作り直す。
+        高さだけの変化(キーボードの表示など)では何もしない
+        (画面全体を作り直すと入力中の欄からフォーカスが外れるため)。
+        """
+        if self.page.width != getattr(self, '_nav_width', None):
+            self.page.navigation_bar = self.build_navigation_bar()
+            self.page.update()
+
+    def build_navigation_bar(self) -> ft.NavigationBar:
+        """bottom tabs sized by font scale
+
+        JP:
+        下のタブ。文字の大きさ(A－/A＋)に合わせて大きくする(nav_layout 参照)。
+        文字だけの形では、選ばれたタブを色・太字・背景の枠で示す(選択の丸い印は
+        大きさが固定で文字からはみ出すので消す)。タブを長押しすると
+        省略しない名前が出る。
+        """
+        width = self.page.width if self.page is not None else None
+        self._nav_width = width
+        scale = self.scale
+        mode, labels, size = nav_layout(width, scale)
+        if mode == 'icon':
+            # 既定(100%)で 80
+            height = round(44 + (NAV_ICON_SIZE + NAV_LABEL_SIZE) * scale)
+        else:
+            height = max(80, round(size * 1.4 + 32))
+        self._nav_height = height
+        if self.page is not None:
+            # ラベルの文字の大きさはテーマでしか変えられない。
+            # 高さもテーマで指定する(コントロールの height は画面下の
+            # システムのボタンの分まで含むので、タブが下に隠れて切れる)
+            # 選ばれたタブのラベルは太字で明るく(Material 3 の既定と同じ見た目)
+            style = ft.NavigationBarTheme(
+                height=height,
+                label_text_style={
+                    ft.ControlState.SELECTED: ft.TextStyle(
+                        size=round(size), color=ft.Colors.ON_SURFACE,
+                        weight=ft.FontWeight.W_600),
+                    ft.ControlState.DEFAULT: ft.TextStyle(
+                        size=round(size),
+                        color=ft.Colors.ON_SURFACE_VARIANT)})
+            self.page.theme.navigation_bar_theme = style
+            self.page.dark_theme.navigation_bar_theme = style
+        destinations = []
+        for (name, icon), label in zip(NAV_TABS, labels):
+            if mode == 'icon':
+                destinations.append(ft.NavigationBarDestination(
+                    icon=ft.Icon(icon, size=round(NAV_ICON_SIZE * scale)),
+                    label=name, tooltip=name))
+                continue
+            destinations.append(ft.NavigationBarDestination(
+                icon=ft.Text(label, size=round(size), no_wrap=True,
+                             color=ft.Colors.ON_SURFACE),
+                # 選ばれたタブは色付きの背景の枠で示す(下線だと「一」が
+                # 「二」に見えるため)
+                selected_icon=ft.Container(
+                    content=ft.Text(label, size=round(size), no_wrap=True,
+                                    color=ft.Colors.PRIMARY,
+                                    weight=ft.FontWeight.BOLD),
+                    bgcolor=ft.Colors.with_opacity(0.25, ft.Colors.PRIMARY),
+                    border_radius=8,
+                    padding=ft.Padding.symmetric(horizontal=4)),
+                label=name, tooltip=name))
+        if mode == 'icon':
+            return ft.NavigationBar(
+                selected_index=self.tab, on_change=self.on_tab,
+                destinations=destinations)
+        return ft.NavigationBar(
+            selected_index=self.tab, on_change=self.on_tab,
+            label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_HIDE,
+            indicator_color=ft.Colors.TRANSPARENT,
+            destinations=destinations)
+
     def on_tab(self, e):
-        """navigation bar changed"""
-        self.tab = e.control.selected_index
-        self.detail_drug = None
-        self.bulk = None
-        self.refresh()
+        """navigation bar changed
+
+        JP:
+        下のタブが押された。一括棚卸しの入力を実行せずに離れようとしたときは
+        警告して一括棚卸しのタブに留まる(confirm_leave_bulk)。
+        """
+        index = e.control.selected_index
+
+        def go():
+            self.set_tab(index)
+            self.refresh()
+
+        if index == self.tab or self.confirm_leave_bulk(go):
+            go()
 
     def set_tab(self, index: int):
-        """switch tab from code (also updates navigation bar)"""
+        """switch tab
+
+        JP:
+        タブを切り替える。一括棚卸しのタブに入るときは、本数を記録上の
+        本数(今日の時点)から始める。
+        """
         self.tab = index
         self.detail_drug = None
         self.bulk = None
-        if self.page is not None:
-            self.page.navigation_bar.selected_index = index
+        if index == TAB_BULK:
+            self.reset_bulk()
 
     def refresh(self):
         """rebuild current tab
 
         JP:
-        現在のタブを作り直して表示する。一括棚卸しの画面はタブより優先。
+        現在のタブを作り直して表示する。
         """
-        builders = [self.build_summary, self.build_drugs, self.build_data]
-        if self.bulk is not None:
-            controls = self.build_bulk_inventory()
-        elif self.tab == 1 and self.detail_drug is not None:
+        builders = {TAB_SUMMARY: self.build_summary,
+                    TAB_DRUGS: self.build_drugs,
+                    TAB_BULK: self.build_bulk_inventory,
+                    TAB_DATA: self.build_data}
+        if self.tab == TAB_DRUGS and self.detail_drug is not None:
             controls = self.build_detail(self.detail_drug)
         else:
             controls = builders[self.tab]()
         # 縦スクロールバーが内容に重ならないよう右に余白
-        # 画面(タブ・詳細・一括棚卸し)が変わったら先頭から表示する
-        view = (self.tab, self.detail_drug, self.bulk is not None)
+        # 画面(タブ・詳細)が変わったら先頭から表示する
+        view = (self.tab, self.detail_drug)
         scroll_top = view != getattr(self, '_view', view)
         self._view = view
         self.body.controls = [ft.Container(
@@ -475,6 +594,7 @@ class EyedropApp:
             content=ft.Column(controls=controls, spacing=12))]
         if self.page is not None:
             self.page.appbar = self.build_topbar()
+            self.page.navigation_bar = self.build_navigation_bar()
             if scroll_top:
                 self.page.run_task(self.body.scroll_to, offset=0)
             self.apply_theme()
@@ -853,25 +973,37 @@ class EyedropApp:
                             input_filter=ft.NumbersOnlyInputFilter())
 
     def ask(self, title: str, controls: list[ft.Control], ok_label: str,
-            on_ok: Callable[[], Optional[str]]):
+            on_ok: Callable[[], Optional[str]],
+            cancel_label: str = 'キャンセル', safe_cancel: bool = False):
         """dialog with OK / cancel
 
         JP:
         OK・キャンセルのダイアログ。 OK で on_ok を実行する。
+        safe_cancel なら、OK が入力を消すなど取り返しのつかない操作なので、
+        キャンセルの方を強調して右に置く(うっかり OK を押さないように)。
         """
         def ok(_e):
             self.page.pop_dialog()
             self.run(on_ok)
 
+        def cancel(_e):
+            self.page.pop_dialog()
+
+        if safe_cancel:
+            actions = [ft.TextButton(content=self.text(ok_label), on_click=ok),
+                       ft.FilledButton(content=self.text(cancel_label),
+                                       on_click=cancel)]
+        else:
+            actions = [ft.TextButton(content=self.text(cancel_label),
+                                     on_click=cancel),
+                       ft.FilledButton(content=self.text(ok_label),
+                                       on_click=ok)]
         # 中身が長いとき・キーボードが出たときはダイアログの中をスクロール
         self.page.show_dialog(ft.AlertDialog(
             modal=True, scrollable=True,
             title=self.text(title, 1.2, bold=True),
             content=ft.Column(tight=True, spacing=12, controls=controls),
-            actions=[ft.TextButton(content=self.text('キャンセル'),
-                                   on_click=lambda e: self.page.pop_dialog()),
-                     ft.FilledButton(content=self.text(ok_label),
-                                     on_click=ok)]))
+            actions=actions))
 
     def on_open(self, drug_id: int):
         """open new bottle dialog"""
@@ -987,15 +1119,68 @@ class EyedropApp:
                  [note, name, actual, max_days, as_needed_row], '追加', ok)
 
     # ------------------------------------------------------------ 一括棚卸し
-    def show_bulk_inventory(self, day: Optional[date] = None):
-        """show bulk stocktaking screen
+    def reset_bulk(self, day: Optional[date] = None):
+        """reset bulk stocktaking input
 
         JP:
-        一括棚卸しの画面を出す(ハンバーガーメニューから)。本数は記録上の
-        未開封の本数(day の時点。省略時今日)から始める。
+        一括棚卸しの入力を初めに戻す。本数は記録上の未開封の本数
+        (day の時点。省略時今日)から始め、コメントは空にする。
         """
         self.bulk = {'date': day or date.today(), 'counts': {}, 'memo': None}
+
+    def show_bulk_inventory(self, day: Optional[date] = None):
+        """show bulk stocktaking tab (shortcut from menu)
+
+        JP:
+        一括棚卸しのタブを出す(ハンバーガーメニューのショートカット)。
+        既に一括棚卸しのタブなら何もしない(入力中の本数を消さない)。
+        """
+        if self.tab == TAB_BULK and self.bulk is not None and day is None:
+            return
+        self.set_tab(TAB_BULK)
+        self.reset_bulk(day)
         self.refresh()
+
+    def bulk_dirty(self) -> bool:
+        """bulk stocktaking has input not yet recorded
+
+        JP:
+        一括棚卸しに、まだ実行していない入力があるか。本数を記録上の本数から
+        変えたか、一括棚卸しコメントを書いたとき。
+        """
+        bulk = self.bulk
+        if bulk is None:
+            return False
+        before = bulk.get('before', {})
+        return bool((bulk['memo'] or '').strip()) or any(
+            qty != before.get(drug_id, qty)
+            for drug_id, qty in bulk['counts'].items())
+
+    def confirm_leave_bulk(self, go: Callable[[], None]) -> bool:
+        """warn before leaving bulk stocktaking with unrecorded input
+
+        JP:
+        一括棚卸しのタブを離れてよいか。入力が実行されていなければ(bulk_dirty)
+        警告ダイアログを出して False(留まる)を返す。ダイアログで
+        「構わず移動」を選んだら go を呼ぶ。
+        """
+        if self.tab != TAB_BULK or not self.bulk_dirty():
+            return True
+        # 下のタブの選択を一括棚卸しに戻す
+        self.refresh()
+        if self.page is None:
+            return False
+
+        def discard():
+            go()
+
+        self.ask('一括棚卸しを実行していません', [self.text(
+            '数え直した本数(またはコメント)は、「棚卸し実行」を押すまで'
+            '記録されません。このまま移ると入力は消えます。'
+            '一括棚卸しに留まるときは「留まる」を押します。', 0.9)],
+            '構わず移動', discard, cancel_label='留まる',
+            safe_cancel=True)
+        return False
 
     def set_bulk_date(self, day: date):
         """change date of bulk stocktaking
@@ -1065,17 +1250,22 @@ class EyedropApp:
 
         JP:
         一括棚卸し: 使用中の目薬を1画面に並べ、未開封の本数を数え直す。
-        日付は1つ(既定は今日)。「記録」で、本数が同じ目薬も含めてすべてを
+        日付は1つ(既定は今日)。「棚卸し実行」で、本数が同じ目薬も含めてすべてを
         棚卸しとして記録し(最後に数えて確かめた日が履歴に残る)、サマリーへ。
         """
+        if self.bulk is None:
+            self.reset_bulk()
         bulk = self.bulk
         day = bulk['date']
         counts = bulk['counts']
         drugs = self.db.list_drugs(active_only=True)
         rows = []
+        # 記録上の本数(入力が変わったかを bulk_dirty で見る)
+        bulk['before'] = {}
         for drug in drugs:
             drug_id = drug['drug_id']
             before = self.db.balance(drug_id, as_of=day)
+            bulk['before'][drug_id] = before
             counts.setdefault(drug_id, before)
             rows.append(self.bulk_row(drug_id, before))
         # 最後の目薬のカードのすぐ下にあるので、その目薬へのコメントと
@@ -1094,24 +1284,23 @@ class EyedropApp:
                 items = self.db.inventory_all(
                     {d['drug_id']: counts[d['drug_id']] for d in drugs},
                     day, memo_value(memo))
-                self.set_tab(0)
+                self.set_tab(TAB_SUMMARY)
                 return f'一括棚卸し: {inventory_result_text(items)}'
             self.run(ok)
 
-        def cancel(_e):
-            self.bulk = None
+        def reset(_e):
+            self.reset_bulk(day)
             self.refresh()
 
         controls = [
-            ft.Row(controls=[
-                ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_size=32,
-                              tooltip='やめる', on_click=cancel),
-                self.text('一括棚卸し', 1.3, bold=True)]),
+            self.heading('一括棚卸し'),
             self.text('使用中の目薬の未開封の本数を数えて、「－」「＋」で'
                       '実際の本数に合わせます。最初は記録上の本数です。'
-                      '「記録」で、本数が同じ目薬も含めてすべてを棚卸しとして'
-                      '記録し、サマリーを表示します。'
-                      '日付を変えると本数はその日の記録上の本数に戻ります。',
+                      '「棚卸し実行」で、本数が同じ目薬も含めてすべてを'
+                      '棚卸しとして記録し、サマリーを表示します。'
+                      '日付を変えると本数はその日の記録上の本数に戻ります。'
+                      '実行せずにほかのタブに移ろうとすると確認します'
+                      '(移ると入力は消えます)。',
                       0.9),
             self.summary_date_button(f'日付 {day.isoformat()}', day,
                                      self.set_bulk_date),
@@ -1123,12 +1312,11 @@ class EyedropApp:
                       '同じコメントが入ります', 0.85),
             memo,
             ft.Row(wrap=True, spacing=8, run_spacing=8, controls=[
-                ft.FilledButton(content=self.text(f'記録({len(drugs)}件)'),
-                                icon=ft.Icons.CHECK, on_click=record,
-                                disabled=not drugs,
-                                style=ft.ButtonStyle(
-                                    padding=ft.Padding.all(14))),
-                self.button('やめる', cancel, icon=ft.Icons.CLOSE,
+                ft.FilledButton(
+                    content=self.text(f'棚卸し実行({len(drugs)}件)'),
+                    icon=ft.Icons.CHECK, on_click=record, disabled=not drugs,
+                    style=ft.ButtonStyle(padding=ft.Padding.all(14))),
+                self.button('記録上の本数に戻す', reset, icon=ft.Icons.UNDO,
                             filled=False)])]
         return controls
 

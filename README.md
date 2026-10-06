@@ -4,13 +4,14 @@ An Android app and command-line tool that tracks eye drop stock and estimates
 how many bottles to ask for at your next eye doctor visit.
 The user interface and documentation are in Japanese.
 
-| Summary | Stock | Eye drops | Detail |
-|---|---|---|---|
-| <img src="images/summary.png" width="180" alt="Summary"> | <img src="images/stock.png" width="180" alt="Stock"> | <img src="images/drugs.png" width="180" alt="Eye drops"> | <img src="images/detail.png" width="180" alt="Detail"> |
+| Summary | Stock | Eye drops | Detail | Bulk stocktaking |
+|---|---|---|---|---|
+| <img src="images/summary.png" width="160" alt="Summary"> | <img src="images/stock.png" width="160" alt="Stock"> | <img src="images/drugs.png" width="160" alt="Eye drops"> | <img src="images/detail.png" width="160" alt="Detail"> | <img src="images/bulk.png" width="160" alt="Bulk stocktaking"> |
 
 ## Features
 
 - Records prescriptions, opened bottles and stocktaking
+- Bulk stocktaking before a visit: recount all eye drops in use on one screen
 - Estimates how many days one bottle lasts from recent usage
 - Calculates the bottles needed until the next visit, with the basis of the calculation
 - Backup and restore; the Android app works offline with its own data

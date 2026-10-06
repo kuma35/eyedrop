@@ -44,6 +44,8 @@ language = 'ja'
 html_theme = 'sphinx_rtd_theme'
 html_title = f'目薬管理 {release}'
 html_static_path = ['_static']
+# 黒地でオプションの見出しが読めないのを直す(_static/eyedrop.css)
+html_css_files = ['eyedrop.css']
 html_show_sourcelink = False
 html_copy_source = False
 html_theme_options = {

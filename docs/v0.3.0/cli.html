@@ -1,0 +1,389 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="ja" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI版 &mdash; 目薬管理 0.3.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/general.css?v=c0a7eb24" />
+      <link rel="stylesheet" type="text/css" href="_static/dark_mode_css/dark.css?v=70edf1c7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=38d171d7"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/translations.js?v=4755f45a"></script>
+      <script src="_static/dark_mode_js/default_dark.js?v=fd565c74"></script>
+      <script src="_static/dark_mode_js/theme_switcher.js?v=358d3910"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="eyedrop(コマンド)" href="eyedrop.html" />
+    <link rel="prev" title="Android版" href="android.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            目薬管理(eyedrop)
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">目次</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="android.html">Android版</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CLI版</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id1">動作環境</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id2">インストール</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id3">データベース</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id4">使用例</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id5">目薬を登録する</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id6">処方された(入庫)・開封した</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id7">一覧・履歴を見る</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id8">受診前サマリーを出す</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id9">来院日・次回来院日を指定する</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id10">対話シェル</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id11">コマンド一覧</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id12">よく使うその他のコマンド</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="eyedrop.html">eyedrop(コマンド)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="estimate.html">推定のしくみ</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sample.html">サンプルデータ</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">目薬管理(eyedrop)</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">CLI版</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cli">
+<h1>CLI版<a class="headerlink" href="#cli" title="Link to this heading"></a></h1>
+<p>コマンドラインで動く版です。Android版とは別にデータを持ちます。</p>
+<section id="id1">
+<h2>動作環境<a class="headerlink" href="#id1" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Linux(Ubuntu 24.04 で確認)</p></li>
+<li><p>Python 3.9 以上(3.9〜3.14 でテストが通ることを確認。3.8 以前は動きません)</p></li>
+<li><p>標準ライブラリだけで動きます。追加のパッケージは不要です</p></li>
+</ul>
+</section>
+<section id="id2">
+<h2>インストール<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/kuma35/eyedrop.git<span class="w"> </span>eyedrop
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>eyedrop
+<span class="gp">$ </span>./install.sh
+<span class="gp">$ </span>eyedrop<span class="w"> </span>--version
+<span class="gp">$ </span>man<span class="w"> </span>eyedrop
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">install.sh</span></code> は次のものを入れます(既定は <code class="docutils literal notranslate"><span class="pre">PREFIX=$HOME</span></code>)。</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">$PREFIX/bin/eyedrop</span></code>: コマンド</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">$PREFIX/share/eyedrop/drugdb/</span></code>: 本体(Python のファイル)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">$PREFIX/share/man/man1/eyedrop.1</span></code>: man ページ(<a class="reference internal" href="eyedrop.html"><span class="doc">eyedrop(コマンド)</span></a> と同じ内容)</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">PREFIX=~/.local</span> <span class="pre">./install.sh</span></code> のように入れる場所を変えられます。
+<code class="docutils literal notranslate"><span class="pre">$PREFIX/bin</span></code> が PATH に入っていないときは、PATH に追加するか、ログインし直してください
+(Ubuntu では <code class="docutils literal notranslate"><span class="pre">~/bin</span></code> と <code class="docutils literal notranslate"><span class="pre">~/.local/bin</span></code> は、あればログイン時に PATH に入ります)。
+更新するときは、<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">pull</span></code> してからもう一度 <code class="docutils literal notranslate"><span class="pre">./install.sh</span></code> を実行します。
+<code class="docutils literal notranslate"><span class="pre">./install.sh</span> <span class="pre">--uninstall</span></code> で取り除きます(データベースは残します)。</p>
+<p>インストールせずに、リポジトリから <code class="docutils literal notranslate"><span class="pre">drugdb/cmd_drugdb.sh``(または</span> <span class="pre">``python3</span> <span class="pre">-m</span> <span class="pre">drugdb</span></code>)で同じように使うこともできます。</p>
+</section>
+<section id="id3">
+<h2>データベース<a class="headerlink" href="#id3" title="Link to this heading"></a></h2>
+<p>データベースは、既定では <code class="docutils literal notranslate"><span class="pre">~/.local/share/eyedrop/eyedrop.db</span></code> です
+(<code class="docutils literal notranslate"><span class="pre">$XDG_DATA_HOME</span></code> があれば <code class="docutils literal notranslate"><span class="pre">$XDG_DATA_HOME/eyedrop/eyedrop.db</span></code>)。
+無ければフォルダごと新しく作り、そのことを知らせます。</p>
+<p>別の場所を使う場合は <code class="docutils literal notranslate"><span class="pre">-f</span></code> オプションか環境変数 <code class="docutils literal notranslate"><span class="pre">EYEDROP_DB</span></code> で指定します。
+指定したファイルが無いとエラーになります(打ち間違いで空のデータベースを見てしまわないため)。
+新しく作るときは <code class="docutils literal notranslate"><span class="pre">--create</span></code> を付けます。
+Android版のバックアップのファイルも、そのまま指定して使えます。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>-f<span class="w"> </span>~/eyedrop-backup-20261001.db<span class="w"> </span>drugs
+<span class="gp">$ </span>eyedrop<span class="w"> </span>-f<span class="w"> </span>~/new.db<span class="w"> </span>--create<span class="w"> </span>add<span class="w"> </span>目薬A
+<span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">EYEDROP_DB</span><span class="o">=</span>~/eyedrop.db
+</pre></div>
+</div>
+</section>
+<section id="id4">
+<h2>使用例<a class="headerlink" href="#id4" title="Link to this heading"></a></h2>
+<p>以下の例は、説明用の架空のデータ(目薬A・B・C)です。</p>
+<p>日付は <code class="docutils literal notranslate"><span class="pre">-d</span> <span class="pre">2026-07-10</span></code>・<code class="docutils literal notranslate"><span class="pre">-d</span> <span class="pre">2026/7/10</span></code>・<code class="docutils literal notranslate"><span class="pre">-d</span> <span class="pre">7/10</span></code>(今年)で指定できます。省略すると今日です。</p>
+<section id="id5">
+<h3>目薬を登録する<a class="headerlink" href="#id5" title="Link to this heading"></a></h3>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>add<span class="w"> </span>目薬A
+<span class="go">登録しました: 1 目薬A</span>
+<span class="gp">$ </span>eyedrop<span class="w"> </span>add<span class="w"> </span>目薬B<span class="w"> </span>--max-days<span class="w"> </span><span class="m">28</span><span class="w">     </span><span class="c1"># 開封後4週間で廃棄(廃棄期限)</span>
+<span class="go">登録しました: 2 目薬B</span>
+<span class="gp">$ </span>eyedrop<span class="w"> </span>add<span class="w"> </span>目薬C<span class="w"> </span>--as-needed<span class="w">       </span><span class="c1"># 随時使用</span>
+<span class="go">登録しました: 3 目薬C</span>
+</pre></div>
+</div>
+</section>
+<section id="id6">
+<h3>処方された(入庫)・開封した<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span><span class="k">in</span><span class="w"> </span>目薬A<span class="w"> </span><span class="m">3</span><span class="w"> </span>-d<span class="w"> </span><span class="m">2026</span>-07-10<span class="w">    </span><span class="c1"># 3本処方された</span>
+<span class="go">在庫: 3</span>
+<span class="gp">$ </span>eyedrop<span class="w"> </span>open<span class="w"> </span>目薬A<span class="w"> </span>-d<span class="w"> </span><span class="m">2026</span>-07-21<span class="w">    </span><span class="c1"># 新しい1本を開封</span>
+<span class="go">在庫: 2</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">open</span></code> は、在庫から1本減らし、使っていた1本を「使い切り」にして、
+新しい1本の使用を開始します。間違えた開封は <code class="docutils literal notranslate"><span class="pre">undoopen</span></code> で取り消せます。</p>
+</section>
+<section id="id7">
+<h3>一覧・履歴を見る<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>drugs
+<span class="go">  1 目薬A  在庫0</span>
+<span class="go">  2 目薬B  在庫0  (廃棄期限28日)</span>
+<span class="go">  3 目薬C  在庫2  (随時使用)</span>
+
+<span class="gp">$ </span>eyedrop<span class="w"> </span>life<span class="w"> </span>目薬A
+<span class="go">    1 2026-05-01 〜 2026-05-27  26日</span>
+<span class="go">    2 2026-05-27 〜 2026-06-24  28日</span>
+<span class="go">    3 2026-06-24 〜 2026-07-21  27日</span>
+<span class="go">    4 2026-07-21 〜 2026-08-15  25日</span>
+<span class="go">    5 2026-08-15 〜 2026-09-11  27日</span>
+<span class="go">    6 2026-09-11 〜 (使用中)       20日</span>
+
+<span class="gp">$ </span>eyedrop<span class="w"> </span>stock<span class="w"> </span>目薬A
+<span class="go">    1 2026-05-01 入庫  3  残 3</span>
+<span class="go">    2 2026-05-01 出庫  1  残 2</span>
+<span class="go">    3 2026-05-27 出庫  1  残 1</span>
+<span class="go">    4 2026-06-24 出庫  1  残 0</span>
+<span class="go">    5 2026-07-10 入庫  3  残 3</span>
+<span class="go">    6 2026-07-21 出庫  1  残 2</span>
+<span class="go">    7 2026-08-15 出庫  1  残 1</span>
+<span class="go">    8 2026-09-11 出庫  1  残 0</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">life</span></code> の左端の番号はライフタイム(開封から使い切りまで)の ID、<code class="docutils literal notranslate"><span class="pre">stock</span></code> の左端は在庫記録の ID です。
+使用中の1本の日数は、実行した日までの日数です。</p>
+</section>
+<section id="id8">
+<h3>受診前サマリーを出す<a class="headerlink" href="#id8" title="Link to this heading"></a></h3>
+<p>受診の直前に <code class="docutils literal notranslate"><span class="pre">report</span></code> を実行します。出力は Markdown です(<code class="docutils literal notranslate"><span class="pre">--plain</span></code> でテキスト版、<code class="docutils literal notranslate"><span class="pre">-o</span> <span class="pre">ファイル</span></code> でファイルにも出力)。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>report<span class="w"> </span>-v<span class="w"> </span><span class="m">2026</span>-09-25
+</pre></div>
+</div>
+<p>出力(抜粋)はこうなります。</p>
+<div class="highlight-markdown notranslate"><div class="highlight"><pre><span></span><span class="gh"># 目薬 受診前サマリー</span>
+
+<span class="k">-</span><span class="w"> </span>来院日 2026-09-25
+<span class="k">-</span><span class="w"> </span>次回来院日 2026-11-24(60日後)
+
+<span class="gu">## 次回来院までに必要な本数</span>
+
+| 代表目薬名(目薬名) | 必要本数 | 足りない日数 | 在庫残日数 | 未開封 | 通常期間 | 開封分残日数 |
+|---|---:|---:|---:|---:|---:|---:|
+| 目薬A | 3 | 48 | 12 | 0 | 26 | 12 |
+| 目薬B | 3 | 50 | 10 | 0 | 31 | 10 |
+| 目薬C | 随時 |  |  | 0 |  |  |
+
+<span class="gu">## 目薬在庫</span>
+
+| 代表目薬名 | 未開封個数 | 開封分開封日 | 経過日数 | 推定残日数 | 日数 |
+|---|---:|---|---:|---:|---:|
+| 目薬A | 0 | 9/11 | 14 | 12 | 27 |
+| 目薬B | 0 | 9/4 | 21 | 10 | 30 |
+</pre></div>
+</div>
+<p>このほか、各項目の説明と「推定の根拠」(廃棄期限超過などの注意点があれば「注意」も)が出力されます。
+計算のしかたは <a class="reference internal" href="estimate.html"><span class="doc">推定のしくみ</span></a> を参照してください。</p>
+<p>出力した Markdown は、そのまま Evernote Web のノートなどに貼り付けられます。
+<code class="docutils literal notranslate"><span class="pre">--ai</span></code> を付けると、チャットAI に貼り付ける指示と JSON を出力します。</p>
+</section>
+<section id="id9">
+<h3>来院日・次回来院日を指定する<a class="headerlink" href="#id9" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">-n</span></code>(<code class="docutils literal notranslate"><span class="pre">--next</span></code>)で次回来院日を日付か期間で指定できます。
+省略すると来院日の2ヶ月後です(<code class="docutils literal notranslate"><span class="pre">interval</span></code> で変更できます)。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>report<span class="w"> </span>-n<span class="w"> </span><span class="m">11</span>/20<span class="w">       </span><span class="c1"># 次回来院日を日付で</span>
+<span class="gp">$ </span>eyedrop<span class="w"> </span>report<span class="w"> </span>-n<span class="w"> </span>4週間<span class="w">       </span><span class="c1"># 来院日から4週間後</span>
+<span class="gp">$ </span>eyedrop<span class="w"> </span>interval<span class="w"> </span>8週間<span class="w">        </span><span class="c1"># 既定の期間を8週間に</span>
+</pre></div>
+</div>
+<p>期間は「2ヶ月」「8週間」「60日」「60」のように指定できます(1ヶ月=30日)。</p>
+<p><code class="docutils literal notranslate"><span class="pre">-v</span></code>(<code class="docutils literal notranslate"><span class="pre">--visit</span></code>)で来院日を指定すると、その日時点の在庫・開封中の1本・実績で計算します。
+過去の受診日で試して、実際に処方された本数と比べるのに便利です。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop<span class="w"> </span>report<span class="w"> </span>-v<span class="w"> </span><span class="m">2026</span>-09-20<span class="w"> </span>-n<span class="w"> </span><span class="m">2026</span>-11-15
+</pre></div>
+</div>
+</section>
+<section id="id10">
+<h3>対話シェル<a class="headerlink" href="#id10" title="Link to this heading"></a></h3>
+<p>引数なしで起動すると対話シェルになります。<code class="docutils literal notranslate"><span class="pre">help</span></code> でコマンド一覧、<code class="docutils literal notranslate"><span class="pre">コマンド</span> <span class="pre">-h</span></code> でそのコマンドのヘルプが出ます。
+対話シェルでは <code class="docutils literal notranslate"><span class="pre">visit</span></code>・<code class="docutils literal notranslate"><span class="pre">next</span></code> で来院日・次回来院日を設定しておくと、以後の <code class="docutils literal notranslate"><span class="pre">report</span></code> はその日付で計算します。</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>eyedrop
+<span class="go">目薬管理 (help でコマンド一覧、 q で終了)</span>
+<span class="go">eyedrop&gt; visit 9/25</span>
+<span class="go">来院日 2026-09-25</span>
+<span class="go">次回来院日 2026-11-24(60日後)(既定: 2ヶ月後)</span>
+<span class="go">eyedrop&gt; next 11/20</span>
+<span class="go">来院日 2026-09-25</span>
+<span class="go">次回来院日 2026-11-20(56日後)</span>
+<span class="go">eyedrop&gt; report</span>
+</pre></div>
+</div>
+</section>
+<section id="id11">
+<h3>コマンド一覧<a class="headerlink" href="#id11" title="Link to this heading"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>eyedrop&gt; help
+各サブコマンドの詳しいヘルプは -h(例: drugs -h、または help drugs)
+  add        薬を登録  [-d DATE] [--max-days MAX_DAYS] [--default-days DEFAULT_DAYS] [--as-needed] [-m MEMO]
+  alias      目薬名を追加(代表目薬名はそのまま。-d で開始日)  [-d DATE] [-m MEMO]
+  dellife    ライフタイムを削除(訂正用)
+  delstock   在庫記録を削除(訂正用)
+  drugs      薬の一覧  [-a]
+  end        薬の使用を終了(サマリーに出さない)  [-d DATE]
+  endname    目薬名の利用終了日を設定(全部終了した代表目薬名は利用終了扱い)  [-d DATE] [--clear]
+  finish     開封中の1本を使用終了(次を開封しない場合)  [-d DATE] [-m MEMO] [-i]
+  help       help [コマンド]: コマンド一覧またはコマンドのヘルプ
+  import     スプレッドシート(eyedrop-stock.ods)を取り込む
+  in         入庫(処方された)  [-d DATE] [-m MEMO]
+  interval   次回来院日の既定(来院日から何日後か)を設定・表示
+  inv        棚卸し(未開封の在庫数を qty とする)  [-d DATE] [-m MEMO]
+  invall     一括棚卸し(使用中の目薬を順に聞く。空 Enter で記録上の本数のまま、q で中止)  [-d DATE] [-m MEMO]
+  irregular  ライフタイムをイレギュラー(推定に使わない)にする  [--clear] [-m MEMO]
+  life       ライフタイムの履歴
+  next       次回来院日を設定・表示(既定は来院日 + interval の期間)  [-r]
+  note       日付付きメモを追加  [-d DATE]
+  open       開封(在庫から1本出して使い始める。前の1本は使用終了)  [-d DATE] [-m MEMO] [--no-stock]
+  out        出庫(開封以外で在庫が減った。開封は open)  [-d DATE] [-m MEMO]
+  pattern    点眼パターン変更(直近の開封をイレギュラーにし、それより前を推定に使わない)  [-d DATE] [-m MEMO]
+  q          終了
+  quit       終了
+  report     受診前サマリー(来院日から次回来院日までの必要本数)  [-v DATE] [-n 日付|期間] [--margin MARGIN] [--plain] [--ai] [-o FILE]
+  rollover   年次更新(バックアップ・エクスポート・在庫繰越)  [-o OUT]
+  set        薬の項目を変更(例: set キサラタン max_days 28)
+  show       薬の詳細
+  stock      在庫の履歴
+  undoopen   一番新しい開封を取り消す(在庫を戻し、前の1本を使用中に戻す)
+  visit      来院日を設定・表示(report の基準日。既定は今日)  [-r]
+</pre></div>
+</div>
+</section>
+<section id="id12">
+<h3>よく使うその他のコマンド<a class="headerlink" href="#id12" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>コマンド</p></th>
+<th class="head"><p>内容</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">inv</span> <span class="pre">目薬A</span> <span class="pre">2</span></code></p></td>
+<td><p>棚卸し。未開封の在庫数を2本とする</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">invall</span></code></p></td>
+<td><p>一括棚卸し(来院の直前に)。使用中の目薬を順に聞くので未開封の本数を入れる。
+空 Enter で記録上の本数のまま。本数が同じ目薬も棚卸しとして記録する</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">alias</span> <span class="pre">目薬A</span> <span class="pre">ジェネリック名</span></code></p></td>
+<td><p>ジェネリックなどで実際にもらう目薬の名前が変わったとき</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">irregular</span> <span class="pre">5</span> <span class="pre">-m</span> <span class="pre">紛失</span></code></p></td>
+<td><p>ライフタイム(ID は <code class="docutils literal notranslate"><span class="pre">life</span></code> で表示)をイレギュラーにし、推定から外す</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pattern</span> <span class="pre">目薬A</span> <span class="pre">-m</span> <span class="pre">1日2回→1回</span></code></p></td>
+<td><p>点眼パターン変更。直近の1本をイレギュラーにし、それより前の実績を推定に使わない</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finish</span> <span class="pre">目薬A</span> <span class="pre">-i</span> <span class="pre">-m</span> <span class="pre">中止</span></code></p></td>
+<td><p>次を開封せずに使用中の1本を終わらせる(中止・紛失など)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">end</span> <span class="pre">目薬A</span></code></p></td>
+<td><p>目薬の使用をやめた(サマリーに出さない)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set</span> <span class="pre">目薬C</span> <span class="pre">as_needed</span> <span class="pre">yes</span></code></p></td>
+<td><p>随時使用に変更</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rollover</span></code></p></td>
+<td><p>年次更新。一昨年以前の記録をバックアップ・CSV に退避</p></td>
+</tr>
+</tbody>
+</table>
+<p>一括棚卸し(<code class="docutils literal notranslate"><span class="pre">invall</span></code>)の例です。使用中の目薬を順に聞くので、未開封の本数を入れます
+(空 Enter で記録上の本数のまま、<code class="docutils literal notranslate"><span class="pre">q</span></code> か Ctrl-D で中止して何も記録しない)。
+<code class="docutils literal notranslate"><span class="pre">-d</span></code> で日付、<code class="docutils literal notranslate"><span class="pre">-m</span></code> で全部の記録に入るコメントを指定できます。</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>eyedrop&gt; invall -m 来院前
+  1 コソプト(現在:ドルモロール) [3]:
+  2 キサラタン(現在:ラタノプロスト) [3]: 2
+  3 グラナテック [3]:
+  4 シアノコバラミン [3]:
+2026-10-06 4件を記録(うち本数の修正 1件)
+  キサラタン: 3 → 2
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="android.html" class="btn btn-neutral float-left" title="Android版" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="eyedrop.html" class="btn btn-neutral float-right" title="eyedrop(コマンド)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2026, kuma35.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

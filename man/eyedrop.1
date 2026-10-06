@@ -28,7 +28,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "EYEDROP" "1" "2026年10月02日" "0.2.0" "目薬管理(eyedrop)"
+.TH "EYEDROP" "1" "2026年10月06日" "0.3.0" "目薬管理(eyedrop)"
 .ds AD l
 .ad l
 .nh
@@ -119,6 +119,11 @@ eyedrop \- 目\:薬\:の\:在\:庫\:管\:理\:と\:次\:回\:来\:院\:ま\:で\
 .TP
 \fBinv\fP [\fB\-d\fP \fI日\:付\:\fP] [\fB\-m\fP \fIメ\:モ\:\fP] \fI薬\:\fP \fI本\:数\:\fP
 棚\:卸\:し\:(未\:開\:封\:の\:在\:庫\:数\:を\: \fI本\:数\:\fP と\:す\:る)
+.TP
+\fBinvall\fP [\fB\-d\fP \fI日\:付\:\fP] [\fB\-m\fP \fIメ\:モ\:\fP]
+一\:括\:棚\:卸\:し。\:使\:用\:中\:の\:目\:薬\:を\:順\:に\:聞\:く\:の\:で、\:未\:開\:封\:の\:本\:数\:を\:入\:れ\:る
+(空\: Enter で\:記\:録\:上\:の\:本\:数\:の\:ま\:ま、\: \fBq\fP で\:中\:止\:し\:て\:何\:も\:記\:録\:し\:な\:い)。
+本\:数\:が\:同\:じ\:目\:薬\:も\:棚\:卸\:し\:と\:し\:て\:記\:録\:す\:る
 .TP
 \fBstock\fP \fI薬\:\fP
 在\:庫\:の\:履\:歴

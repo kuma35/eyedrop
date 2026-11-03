@@ -204,13 +204,19 @@ class TestMobileScreens(unittest.TestCase):
                   and isinstance(getattr(c.controls[0], 'content', None),
                                  ft.DataTable)]
         heads = [[col.label.value for col in t.columns] for t in tables]
-        self.assertEqual(heads[0][1:], ['必要\n本数', '足りない\n日数',
-                                        '在庫\n残日数',
-                                        '未\n開封', '通常\n期間',
-                                        '開封分\n残日数'])
-        self.assertEqual(heads[1][1:], ['未\n開封', '開封日', '残\n日数',
+        self.assertEqual(heads[1][1:], ['必要\n本数', '不足\n日数',
+                                        '在庫\n残日数', '在庫\n本数',
                                         '通常\n日数'])
-        self.assertGreater(tables[1].heading_row_height, self.app.size(2.4))
+        self.assertEqual(heads[0][1:], ['在庫\n本数', '開封分\n開封日',
+                                        '経過\n日数', '残\n日数',
+                                        '通常\n日数'])
+        # 目薬在庫が先頭、その下に次回来院までに必要な本数(見出しは日付ボタンより上)
+        text = self.texts(controls)
+        self.assertLess(text.index('目薬在庫'),
+                        text.index('次回来院までに必要な本数'))
+        self.assertLess(text.index('次回来院までに必要な本数'),
+                        text.index('来院日 '))
+        self.assertGreater(tables[0].heading_row_height, self.app.size(2.4))
 
     def test_drugs(self):
         text = self.texts(self.app.build_drugs())
@@ -467,8 +473,9 @@ class TestMobileScreens(unittest.TestCase):
         self.assertEqual(first.content.value, '目薬追加')
         # サマリーの説明文
         text = self.texts(self.app.build_summary())
-        self.assertIn('足りない日数：次回来院日までの日数−在庫残日数', text)
-        self.assertIn('開封日：現在使っている目薬を開封した日。', text)
+        self.assertIn('不足日数：次回来院日までの日数−在庫残日数', text)
+        self.assertNotIn('開封日：', text)
+        self.assertNotIn('開封分残日数', text)
         self.assertIn('通常日数：この目薬は通常何日で使い切っているか', text)
         # 設定タブで次回来院日の既定の期間を設定
         data = self.app.build_data()

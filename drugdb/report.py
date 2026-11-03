@@ -7,7 +7,7 @@ JP:
 MCP 連携でのノート作成のいずれにもそのまま使えます。
 
 来院日(既定は今日)から次回来院日(既定は来院日 + 設定の期間)までに
-必要な本数を、根拠(足りない日数・在庫残日数・未開封・通常期間・開封分残日数)と
+必要な本数を、根拠(不足日数・在庫残日数・在庫本数・通常日数)と
 一緒に出します。
 """
 import re
@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from .drugdb import DrugDb
-from .estimate import SPARE_BOTTLES, Requirement, last_days, to_date
+from .estimate import Requirement, last_days, to_date
 
 WARNING_TEXT = {
     'stock negative': '在庫数がマイナスです。棚卸ししてください',
@@ -328,31 +328,23 @@ def need_cell(req: Requirement) -> str:
 
 
 def basis_cells(req: Requirement) -> list:
-    """basis cells: short days, stock days, unopened, normal, opened left
+    """basis cells: short days, stock days, stock count, normal days
 
     JP:
-    必要本数の根拠のセル [足りない日数, 在庫残日数, 未開封, 通常期間, 開封分残日数]。
-    随時使用・推定不能は未開封以外を空欄にする。
+    必要本数の根拠のセル [不足日数, 在庫残日数, 在庫本数, 通常日数]。
+    随時使用・推定不能は在庫本数以外を空欄にする。
     """
     if req.stock_days is None:
-        return ['', '', req.stock, '', '']
-    return [req.short_days, req.stock_days, req.stock, req.normal,
-            req.opened_left]
+        return ['', '', req.stock, '']
+    return [req.short_days, req.stock_days, req.stock, req.normal]
 
 
-BASIS_HEADS = ['足りない日数', '在庫残日数', '未開封', '通常期間', '開封分残日数']
+BASIS_HEADS = ['不足日数', '在庫残日数', '在庫本数', '通常日数']
 
 # 必要本数と根拠の説明(Markdown とテキスト版で共通)
 NEED_NOTES = [
-    '必要本数…処方をお願いする本数。足りない日数 ÷ 通常期間 を切り上げ、'
-    f'予備{SPARE_BOTTLES}本を足した本数(0未満は0)。0 は処方不要',
-    '足りない日数…次回来院日までの日数 − 在庫残日数。マイナスは余る日数',
-    '在庫残日数…来院日の時点で残っている目薬の日数'
-    '(開封分残日数 + 未開封 × 通常期間)',
-    '未開封…来院日の時点で未開封の本数',
-    '通常期間…1本を何日で使い切るか(イレギュラーを除く直近3本の平均)',
-    '開封分残日数…来院日の時点での、いま使っている1本の残り日数'
-    '(通常期間 − (来院日 − 開封日)。使い切っている・開封中なしは0)',
+    '不足日数…次回来院日までの日数 − 在庫残日数。マイナスは余る日数',
+    '通常日数…1本を何日で使い切るか(イレギュラーを除く直近3本の平均)',
 ]
 
 
@@ -384,7 +376,7 @@ def stock_table(report: Report) -> list[str]:
     # 既定(both)でもこの表は代表目薬名だけ(ods のノート形式)
     head = NAME_HEAD['representative'] if mode == 'both' else NAME_HEAD[mode]
     out = ['## 目薬在庫', '',
-           f'| {head} | 未開封個数 | 開封分開封日 | 経過日数'
+           f'| {head} | 在庫本数 | 開封分開封日 | 経過日数'
            ' | 推定残日数 | 日数 |',
            '|---|---:|---|---:|---:|---:|']
     for line in report.lines:
@@ -399,9 +391,6 @@ def stock_table(report: Report) -> list[str]:
         out.append(f'| {_md_cell(name)} | {req.stock} | {opened}'
                    f' | {elapsed} | {remaining_text(req)} | {days} |')
     out += ['',
-            '- 未開封個数…来院日の時点で未開封の個数',
-            '- 開封分開封日…現在使用しているのを開封した日',
-            '- 経過日数…開封分開封日から来院日までの日数',
             '- 推定残日数…来院日の時点で現在使っている1本の推定残り日数'
             '(通常期間 − 経過日数)',
             '- 日数…直近の使い切り日数(途中廃棄やイレギュラーの場合は空欄)']
@@ -422,7 +411,7 @@ def to_plain_text(report: Report) -> str:
         req = line.req
         head = f'{line_name(line, mode)}  必要本数{need_cell(req)}'
         if req.as_needed:
-            out.append(f'{head}  未開封{req.stock}')
+            out.append(f'{head}  在庫本数{req.stock}')
             continue
         cells = [f'{label}{value}' for label, value
                  in zip(BASIS_HEADS, basis_cells(req)) if value != '']
@@ -433,9 +422,10 @@ def to_plain_text(report: Report) -> str:
         req = line.req
         if req.as_needed:
             continue
-        parts = [line_name(line, mode), f'未開封{req.stock}']
+        parts = [line_name(line, mode), f'在庫本数{req.stock}']
         if req.opened:
             parts.append(f'開封日{req.opened.month}/{req.opened.day}')
+            parts.append(f'経過日数{req.elapsed}')
         if remaining_text(req):
             parts.append(f'残日数{remaining_text(req)}')
         if line.last_days is not None:

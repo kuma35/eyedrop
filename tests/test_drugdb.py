@@ -466,11 +466,12 @@ class TestReport(DbTestCase):
         # 期間パターンの表示は無し
         self.assertNotIn('2ヶ月', text)
         self.assertIn('| A | 1 | 6/1 | 10 | 20 | 31 |', text)
-        self.assertIn('| 代表目薬名(目薬名) | 必要本数 | 足りない日数'
-                      ' | 在庫残日数 | 未開封 | 通常期間 | 開封分残日数 |', text)
-        self.assertIn('| A(A-generic) | 2 | 10 | 50 | 1 | 30 | 20 |', text)
-        self.assertIn('| 代表目薬名 | 未開封個数 |', text)
-        self.assertIn('| B | 相談 |  |  | 2 |  |  |', text)
+        self.assertIn('| 代表目薬名(目薬名) | 必要本数 | 不足日数'
+                      ' | 在庫残日数 | 在庫本数 | 通常日数 |', text)
+        self.assertIn('| A(A-generic) | 2 | 10 | 50 | 1 | 30 |', text)
+        self.assertIn('| 代表目薬名 | 在庫本数 | 開封分開封日 | 経過日数'
+                      ' | 推定残日数 | 日数 |', text)
+        self.assertIn('| B | 相談 |  |  | 2 |  |', text)
         self.assertIn('- A(A-generic): 通常期間 30日 (直近3本の平均', text)
         self.assertLess(text.index('## 次回来院までに必要な本数'),
                         text.index('## 目薬在庫'))
@@ -647,7 +648,7 @@ class TestReport(DbTestCase):
                          (0, None, None, None))
         self.assertEqual(need_cell(req), '相談')
         text = to_markdown(report)
-        self.assertIn('| X | 相談 |  |  | 0 |  |  |', text)
+        self.assertIn('| X | 相談 |  |  | 0 |  |', text)
         self.assertIn('- X: 通常期間 - (実績なし)', text)
 
     def test_report_next_visit_error(self):
@@ -665,11 +666,11 @@ class TestReport(DbTestCase):
         self.assertTrue(text.startswith(
             '目薬 受診前サマリー\n来院日 2024-06-11\n'
             '次回来院日 2024-08-10(60日後)\n'))
-        self.assertIn('A  必要本数2  足りない日数10  在庫残日数50  未開封1'
-                      '  通常期間30  開封分残日数20', text)
-        self.assertIn('B  必要本数相談  未開封2', text)
-        self.assertIn('D  必要本数随時  未開封2', text)
-        self.assertIn('A  未開封1  開封日6/1  残日数20  通常日数31', text)
+        self.assertIn('A  必要本数2  不足日数10  在庫残日数50  在庫本数1'
+                      '  通常日数30', text)
+        self.assertIn('B  必要本数相談  在庫本数2', text)
+        self.assertIn('D  必要本数随時  在庫本数2', text)
+        self.assertIn('A  在庫本数1  開封日6/1  経過日数10  残日数20  通常日数31', text)
         self.assertNotIn('|', text)
         self.assertNotIn('#', text)
 
@@ -683,11 +684,11 @@ class TestReport(DbTestCase):
         self.assertEqual((data['来院日'], data['次回来院日']),
                          ('2024-06-11', '2024-08-10'))
         a, b, d = data['目薬']
-        self.assertEqual((a['代表目薬名'], a['目薬名'], a['未開封']),
+        self.assertEqual((a['代表目薬名'], a['目薬名'], a['在庫本数']),
                          ('A', 'A-generic', 1))
         self.assertEqual(a['推定残日数'], 20)
-        self.assertEqual((a['必要本数'], a['足りない日数'], a['在庫残日数'],
-                          a['通常期間'], a['開封分残日数']), (2, 10, 50, 30, 20))
+        self.assertEqual((a['必要本数'], a['不足日数'], a['在庫残日数'],
+                          a['通常期間']), (2, 10, 50, 30))
         self.assertEqual(b['必要本数'], '相談')
         self.assertEqual(d['必要本数'], '随時')
         text = to_ai_prompt(report)
@@ -764,7 +765,7 @@ class TestReport(DbTestCase):
         self.assertIn('| A | 1 | 6/1 | 34 | 超過4日 | 31 |', table)
         self.assertIn('| B | 2 |  |  |  |  |', table)
         self.assertNotIn('ヒアレイン', table)
-        self.assertIn('| ヒアレイン | 随時 |  |  | 2 |  |  |', text)
+        self.assertIn('| ヒアレイン | 随時 |  |  | 2 |  |', text)
         self.assertIn('- [info] A(A-generic): 開封から34日経過。'
                       '廃棄期限(4週間)を過ぎています', text)
         self.assertNotIn('[警告]', text)
@@ -782,9 +783,8 @@ class TestReport(DbTestCase):
         report = make_report(self.db, today='2024-06-11', span=60)
         text = to_markdown(report)
         # 上限なし: 60 / 10 = 6本 + 予備1
-        self.assertIn('| A | 7 | 60 | 0 | 0 | 10 | 0 |', text)
+        self.assertIn('| A | 7 | 60 | 0 | 0 | 10 |', text)
         self.assertNotIn('[警告]', text)
-        self.assertNotIn('不足', text)
 
     def test_report_until(self):
         make_sample(self.db)

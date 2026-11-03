@@ -22,11 +22,11 @@ AI_PROMPT = """\
 このデータから、次の2つの表を含むノート本文を日本語で作ってください。
 
 1. 「次回来院までに必要な本数」の表
-   列: 代表目薬名 / 必要本数 / 足りない日数 / 在庫残日数 / 未開封 / 通常期間 / 開封分残日数
+   列: 代表目薬名 / 必要本数 / 不足日数 / 在庫残日数 / 在庫本数 / 通常期間
    必要本数のセルは「必要本数」の値をそのまま書く(随時使用の目薬は「随時」、
    推定できない目薬は「相談」)。
 2. 「目薬在庫」の表(随時使用の目薬は除く)
-   列: 代表目薬名 / 未開封 / 開封日 / 推定残日数 / 通常日数
+   列: 代表目薬名 / 在庫本数 / 開封日 / 経過日数 / 推定残日数 / 通常日数
 
 守ること:
 - 数値・日付・目薬名は JSON のとおりに書き、計算し直したり丸めたりしない。
@@ -57,7 +57,8 @@ def to_ai_data(report: Report) -> dict:
     """summary data for AI (JSON serializable)
 
     JP:
-    Evernote AI に渡すデータ。キーは日本語(表の列名と同じ言葉)。
+    Evernote AI に渡すデータ。キーは日本語(表の列名とほぼ同じ言葉。必要本数の表の通常日数は
+    '通常期間'、目薬在庫の表の通常日数は '通常日数')。
     """
     drugs = []
     for line in report.lines:
@@ -72,11 +73,10 @@ def to_ai_data(report: Report) -> dict:
             '代表目薬名': line.name,
             '目薬名': line.current_name,
             '必要本数': need,
-            '足りない日数': req.short_days,
+            '不足日数': req.short_days,
             '在庫残日数': req.stock_days,
-            '未開封': req.stock,
+            '在庫本数': req.stock,
             '通常期間': req.normal,
-            '開封分残日数': req.opened_left,
             '随時使用': req.as_needed,
             '開封日': req.opened.isoformat() if req.opened else None,
             '経過日数': req.elapsed,

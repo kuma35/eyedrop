@@ -44,12 +44,11 @@ APP_TITLE = '目薬管理'
 DB_NAME = 'eyedrop.db'
 
 # 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)
-UNOPENED_HEAD = '未\n開封'
+STOCK_HEAD = '在庫\n本数'
 # 次回来院までに必要な本数の表の列(名前の後)。必要本数に続いて根拠
-# (report.BASIS_HEADS と同じ順: 足りない日数・在庫残日数・未開封・通常期間・
-# 開封分残日数)
-NEED_HEADS = ['必要\n本数', '足りない\n日数', '在庫\n残日数', UNOPENED_HEAD,
-              '通常\n期間', '開封分\n残日数']
+# (report.BASIS_HEADS と同じ順: 不足日数・在庫残日数・在庫本数・通常日数)
+NEED_HEADS = ['必要\n本数', '不足\n日数', '在庫\n残日数', STOCK_HEAD,
+              '通常\n日数']
 
 # コメント欄の最大文字数(一言メモ程度)
 MEMO_MAX = 100
@@ -737,8 +736,8 @@ class EyedropApp:
         """summary tab
 
         JP:
-        サマリー: 来院日・次回来院日、次回来院までに必要な本数(と根拠)と
-        目薬在庫の表、注意。
+        サマリー: 目薬在庫の表、次回来院までに必要な本数(と根拠。見出しの下に
+        来院日・次回来院日)、注意。
         """
         report = self.report(summary=True)
         mode = report.name_mode
@@ -752,6 +751,7 @@ class EyedropApp:
             stock_rows.append([
                 line_name(line, mode), req.stock,
                 md(req.opened) if req.opened else '',
+                '' if req.elapsed is None else req.elapsed,
                 remaining_text(req),
                 '' if line.last_days is None else line.last_days])
         notes = [self.text(f'{line_name(line, mode)}: {text}', 0.9,
@@ -759,26 +759,19 @@ class EyedropApp:
                            else None)
                  for line in report.lines for level, text in notices(line)]
         controls = [
-            *self.summary_date_controls(report.today, report.next_visit),
-            self.heading('次回来院までに必要な本数'),
-            self.table([NAME_HEAD[mode]] + NEED_HEADS, need_rows,
-                       numeric=(1, 2, 3, 4, 5, 6)),
-            self.text('必要本数：処方をお願いする本数(足りない日数÷通常期間を'
-                      '切り上げて予備1本を足す)。0は処方不要。'
-                      '足りない日数：次回来院日までの日数−在庫残日数'
-                      '(マイナスは余る日数)。'
-                      '在庫残日数：来院日の時点で残っている目薬の日数'
-                      '(開封分残日数＋未開封×通常期間)。'
-                      '通常期間：1本を何日で使い切るか。'
-                      '開封分残日数：来院日の時点での、いま使っている1本の'
-                      '残り日数(通常期間−(来院日−開封日))', 0.8),
             self.heading('目薬在庫'),
-            self.table([NAME_HEAD[mode], UNOPENED_HEAD, '開封日', '残\n日数',
-                        '通常\n日数'],
-                       stock_rows, numeric=(1, 3, 4)),
-            self.text('開封日：現在使っている目薬を開封した日。'
-                      '残日数：来院日の時点で現在使っている目薬の推定残量(日数)、'
+            self.table([NAME_HEAD[mode], STOCK_HEAD, '開封分\n開封日',
+                        '経過\n日数', '残\n日数', '通常\n日数'],
+                       stock_rows, numeric=(1, 3, 4, 5)),
+            self.text('残日数：来院日の時点で現在使っている目薬の推定残量(日数)、'
                       '通常日数：この目薬は通常何日で使い切っているか', 0.8),
+            self.heading('次回来院までに必要な本数'),
+            *self.summary_date_controls(report.today, report.next_visit),
+            self.table([NAME_HEAD[mode]] + NEED_HEADS, need_rows,
+                       numeric=(1, 2, 3, 4, 5)),
+            self.text('不足日数：次回来院日までの日数−在庫残日数'
+                      '(マイナスは余る日数)。'
+                      '通常日数：1本を何日で使い切るか。', 0.8),
         ]
         if notes:
             controls += [self.heading('注意')] + notes

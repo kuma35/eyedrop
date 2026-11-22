@@ -17,7 +17,7 @@ CLI版で使う
    $ eyedrop -f my-sample.db drugs
    $ eyedrop -f my-sample.db report -v 2026-10-01 -n 4ヶ月 --plain
 
-``report`` の出力(テキスト版)はこうなります(各項目の説明の行は一部省略)。
+``report`` の出力(テキスト版)はこうなります。
 
 .. code-block:: text
 

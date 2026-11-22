@@ -1,0 +1,11 @@
+/* 目薬管理のドキュメント用の追加スタイル */
+
+/* 黒地(sphinx_rtd_dark_mode)で、オプションなどの見出し(.. option:: の dt)の文字が
+   テーマの黒(#000)のままになり読めないので、本文と同じ明るい色にする。
+   テーマのセレクタは :not() が多く優先度が高いので !important で上書きする */
+html[data-theme="dark"] .rst-content dl[class] > dt .sig-name,
+html[data-theme="dark"] .rst-content dl[class] > dt .descname,
+html[data-theme="dark"] .rst-content dl[class] > dt .sig-prename,
+html[data-theme="dark"] .rst-content dl[class] > dt .descclassname {
+  color: var(--dark-text-color) !important;
+}

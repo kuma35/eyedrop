@@ -1015,7 +1015,15 @@ Android版と CLI版で、必要な Python が違う(2026-10-01 確認)。
     `QIITA.md` の取りこぼしと `sample.rst` の誤った「一部省略」の注記を直した
   - 範囲外(意図的): 式・詳細画面・推定の根拠の「通常期間」「未開封の本数」は旧用語のまま。「通常日数」は
     必要本数の表(直近3本の平均)と目薬在庫の表(直近1本)で別の値を指す(文書の読み手向けの説明は無い)
-  - 未対応: 公開(プッシュ・タグ v0.4.0・Releases・GitHub Pages)。`docs/v0.3.0/` は凍結のまま
+  - 公開(2026-11-22、user の指示): プッシュ(main は 8c7282f)、軽量タグ v0.4.0(8c7282f)、
+    Releases https://github.com/kuma35/eyedrop/releases/tag/v0.4.0 に `eyedrop.apk` を添付(Latest)。
+    APK は user が `build_release_apk.sh` で 19:57 にビルドしたもの(公開用の鍵の指紋一致、versionName 0.4.0・
+    versionCode 400、DB なし、ソースの最終更新より新しい)。ファイルの SHA-256
+    d6ebe10dbe885e8e347c444b45ed5bab5833b7d0c0b912b4f7d028b1e3c16742(Releases からダウンロードしたものと一致)。
+    データの形式は v0.3.0 と同じとリリースノートに記載。GitHub Pages に v0.4.0 が出たことを確認
+    (v0.4.0/android.html・_images/need.png が 200、ランディングページの最新版も v0.4.0)
+  - 画像は本番データの画面のまま公開(user の決定。個人名・医療機関名は写っていない。今日の日付・次回来院日・開封日は出る)
+  - `docs/v0.3.0/` は凍結のまま
 
 ## 目薬管理改良
 

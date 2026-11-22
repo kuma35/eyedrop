@@ -221,8 +221,7 @@ class TestMobileScreens(unittest.TestCase):
     def test_drugs(self):
         text = self.texts(self.app.build_drugs())
         # 既定は代表目薬名
-        self.assertIn('A\n', text)
-        self.assertNotIn('A-generic', text)
+        self.assertIn('A(A-generic)\n', text)
         self.assertIn('未開封 0本', text)
         self.assertIn('随時使用', text)
         self.assertIn('開封(出庫)', text)
@@ -384,18 +383,23 @@ class TestMobileScreens(unittest.TestCase):
     def test_name_mode(self):
         drug_id = self.app.db.find_drug('A')['drug_id']
         self.assertEqual(self.app.name_mode, 'representative')
-        self.assertEqual(self.app.drug_label(drug_id), 'A')
+        # 併記: 表示モードの名前が主、もう片方が括弧
+        self.assertEqual(self.app.drug_label(drug_id), 'A(A-generic)')
+        self.assertEqual(self.app.drug_name(drug_id), 'A')
         summary = self.texts(self.app.build_summary())
-        self.assertIn('代表目薬名', summary)
-        self.assertNotIn('A-generic', summary)
-        # 画面内一斉切替: 実際に支給される名前
+        self.assertIn('代表目薬名\n(目薬名)', summary)
+        self.assertIn('(A-generic)', summary)
+        self.assertIn('A(A-generic): ', summary)   # 注意の文は1行
+        self.assertIn('A(A-generic)', self.texts(self.app.build_drugs()))
+        # 画面内一斉切替: 実際に支給される名前が主
         self.app.set_name_mode('actual')
-        self.assertEqual(self.app.drug_label(drug_id), 'A-generic')
+        self.assertEqual(self.app.drug_label(drug_id), 'A-generic(A)')
+        self.assertEqual(self.app.drug_name(drug_id), 'A-generic')
         summary = self.texts(self.app.build_summary())
-        self.assertIn('目薬名', summary)
-        self.assertIn('A-generic', summary)
-        self.assertIn('A-generic', self.texts(self.app.build_drugs()))
-        # 共有する Markdown も切り替わる
+        self.assertIn('目薬名\n(代表目薬名)', summary)
+        self.assertIn('(A)', summary)
+        self.assertIn('A-generic(A)', self.texts(self.app.build_drugs()))
+        # 共有する Markdown は変わらない(片方だけ)
         from drugdb.report import to_markdown
         self.assertIn('| A-generic |', to_markdown(self.app.report()))
         # 詳細では両方を表示
@@ -404,6 +408,68 @@ class TestMobileScreens(unittest.TestCase):
         self.assertIn('目薬名:\nA-generic\n2026-02-01〜利用中', detail)
         menu = self.app.build_topbar().leading
         self.assertEqual([i.checked for i in menu.items[:2]], [False, True])
+
+    def test_name_pair_same_name(self):
+        # 名前が同じ薬も併記する(括弧を省略しない)
+        drug_id = self.app.db.find_drug('C')['drug_id']
+        self.assertEqual(self.app.db.current_name(drug_id), 'C')
+        self.assertEqual(self.app.drug_label(drug_id), 'C(C)')
+        self.assertIn('C(C)', self.texts(self.app.build_drugs()))
+
+    def name_cells(self, mode: str) -> list[list[list[str]]]:
+        """name cell texts of each summary table (rows of [main, sub])"""
+        self.app.set_name_mode(mode)
+        tables = []
+
+        def walk(obj):
+            if isinstance(obj, ft.DataTable):
+                rows = []
+                for row in obj.rows:
+                    cell = row.cells[0].content
+                    self.assertIsInstance(cell, ft.Column)
+                    rows.append([t.value for t in cell.controls])
+                tables.append(rows)
+            for name in ('content', 'controls'):
+                child = getattr(obj, name, None)
+                for c in (child if isinstance(child, list) else [child]):
+                    if isinstance(c, ft.Control):
+                        walk(c)
+
+        for control in self.app.build_summary():
+            walk(control)
+        return tables
+
+    def test_summary_tables_name_cells(self):
+        # 目薬在庫の表(随時使用の C は無い)と必要本数の表(両方)
+        self.assertEqual(self.name_cells('representative'),
+                         [[['A', '(A-generic)']],
+                          [['A', '(A-generic)'], ['C', '(C)']]])
+        self.assertEqual(self.name_cells('actual'),
+                         [[['A-generic', '(A)']],
+                          [['A-generic', '(A)'], ['C', '(C)']]])
+
+    def test_name_pair(self):
+        from drugdb.report import name_pair
+        line = self.app.report().lines[0]
+        self.assertEqual(name_pair(line), ('A', 'A-generic'))
+        self.assertEqual(name_pair(line, 'both'), ('A', 'A-generic'))
+        self.assertEqual(name_pair(line, 'actual'), ('A-generic', 'A'))
+
+    def test_detail_heading_single_name(self):
+        # 詳細の見出しは併記しない(下に両方の名前がある)
+        drug_id = self.app.db.find_drug('A')['drug_id']
+        self.app.set_name_mode('actual')
+        heading = self.app.build_detail(drug_id)[0].controls[1]
+        self.assertEqual(heading.value, 'A-generic')
+
+    def test_summary_name_cell_two_lines(self):
+        table = self.app.table(['名前'], [[('A', 'A-generic')], ['x']])
+        cell = table.controls[0].content.rows[0].cells[0].content
+        self.assertIsInstance(cell, ft.Column)
+        self.assertEqual([t.value for t in cell.controls],
+                         ['A', '(A-generic)'])
+        self.assertEqual(cell.controls[1].size, self.app.size(0.8))
+        self.assertEqual(cell.controls[1].color, ft.Colors.OUTLINE)
 
     def test_alias_end_and_ended_drugs(self):
         db = self.app.db
@@ -553,7 +619,7 @@ class TestMobileScreens(unittest.TestCase):
         self.app.ask = lambda title, controls, label, on_ok: asked.update(
             title=title, on_ok=on_ok)
         self.app.on_change_pattern(drug_id)
-        self.assertEqual(asked['title'], 'A の点眼パターン変更')
+        self.assertEqual(asked['title'], 'A(A-generic) の点眼パターン変更')
         self.assertIn('直近の開封をイレギュラーにしました', asked['on_ok']())
         lives = db.lifetimes('A')
         self.assertEqual([r['irregular'] for r in lives], [1, 0, 1])

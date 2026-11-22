@@ -225,6 +225,19 @@ def line_name(line: ReportLine, mode: str = 'both') -> str:
     return f'{line.name}({line.current_name})'
 
 
+def name_pair(line: ReportLine, mode: str = 'representative'
+              ) -> tuple[str, str]:
+    """(main name, sub name) for paired display
+
+    JP:
+    併記用の(主の名前, 副の名前)。 mode が 'actual' なら目薬名が主、
+    それ以外は代表目薬名が主。同じ名前でも省略しない。
+    """
+    if mode == 'actual':
+        return line.current_name, line.name
+    return line.name, line.current_name
+
+
 def opened_text(req: Requirement, remaining_label: str = '推定残り') -> str:
     """opened bottle status text
 

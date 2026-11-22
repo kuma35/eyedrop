@@ -32,9 +32,9 @@ from drugdb.ai_export import to_ai_prompt
 from drugdb.backup import backup_bytes, backup_file_name, restore_bytes
 from drugdb.backup import check_backup
 from drugdb.drugdb import DrugDb, DrugDbError
-from drugdb.report import (DEFAULT_SPAN, NAME_HEAD, SPAN_UNITS, basis_cells,
+from drugdb.report import (DEFAULT_SPAN, SPAN_UNITS, basis_cells,
                            get_default_span, inventory_result_text,
-                           line_name, make_report, need_cell, notices,
+                           make_report, name_pair, need_cell, notices,
                            opened_text, remaining_text,
                            set_default_span, span_label, span_to_unit,
                            to_markdown, to_plain_text, unit_to_span)
@@ -45,6 +45,16 @@ DB_NAME = 'eyedrop.db'
 
 # 値の桁数が少ない列は見出しを2段にして幅を詰める(Markdown の書き出しは1行のまま)
 STOCK_HEAD = '在庫\n本数'
+# 名前の列の見出し(表示モード別。主の名前の見出し + 括弧の名前の見出し)
+NAME_HEADS = {'representative': '代表目薬名\n(目薬名)',
+              'actual': '目薬名\n(代表目薬名)'}
+
+
+def join_pair(pair: tuple[str, str]) -> str:
+    """paired name text: main(sub)"""
+    return f'{pair[0]}({pair[1]})'
+
+
 # 次回来院までに必要な本数の表の列(名前の後)。必要本数に続いて根拠
 # (report.BASIS_HEADS と同じ順: 不足日数・在庫残日数・在庫本数・通常日数)
 NEED_HEADS = ['必要\n本数', '不足\n日数', '在庫\n残日数', STOCK_HEAD,
@@ -285,11 +295,23 @@ class EyedropApp:
         self.db.set_meta('name_mode', mode)
         self.refresh()
 
-    def drug_label(self, drug_id: int) -> str:
-        """drug name by current display mode"""
+    def drug_name(self, drug_id: int) -> str:
+        """drug name by current display mode (one name only)"""
         if self.name_mode == 'actual':
             return self.db.current_name(drug_id)
         return self.db.find_drug(drug_id)['name']
+
+    def drug_label(self, drug_id: int) -> str:
+        """paired drug name by current display mode
+
+        JP:
+        表示モードの名前を主に、もう片方を括弧で併記する。
+        例: コソプト(ドルモロール)、ドルモロール(コソプト)。
+        同じ名前でも併記する。
+        """
+        pair = (self.db.find_drug(drug_id)['name'],
+                self.db.current_name(drug_id))
+        return join_pair(pair[::-1] if self.name_mode == 'actual' else pair)
 
     def summary_dates(self) -> tuple[date, date]:
         """(visit date, next visit date) of summary
@@ -624,6 +646,21 @@ class EyedropApp:
             self.notify(message)
 
     # ------------------------------------------------------------ サマリー
+    def table_cell(self, value) -> ft.Control:
+        """table cell content
+
+        JP:
+        値が (主の名前, 副の名前) なら、上下 2 行(主の名前の下に
+        小さく淡色で「(副の名前)」)。それ以外は 1 行の文字。
+        """
+        if isinstance(value, tuple):
+            main, sub = value
+            return ft.Column(spacing=0, tight=True, controls=[
+                ft.Text(main, no_wrap=True),
+                ft.Text(f'({sub})', no_wrap=True, size=self.size(0.8),
+                        color=ft.Colors.OUTLINE)])
+        return ft.Text(str(value), no_wrap=True)
+
     def table(self, heads: list[str], rows: list[list],
               numeric: tuple[int, ...] = ()) -> ft.Control:
         """horizontally scrollable data table
@@ -639,6 +676,8 @@ class EyedropApp:
             rows = [[''] * len(heads)]
         # 見出しが2段(\n を含む)なら見出し行を高くする
         head_lines = max(h.count('\n') + 1 for h in heads)
+        # 名前が (主, 副) の 2 値なら上下 2 行で描くので、行を高くする
+        two_line = any(isinstance(v, tuple) for row in rows for v in row)
         line = ft.BorderSide(width=TABLE_LINE_WIDTH, color=ft.Colors.OUTLINE)
         data_table = ft.DataTable(
             column_spacing=12, horizontal_margin=8,
@@ -649,15 +688,15 @@ class EyedropApp:
                                                      ft.Colors.PRIMARY),
             heading_row_height=self.size(max(2.4, 1.2 * head_lines + 1.0)),
             data_row_min_height=self.size(2.4),
-            data_row_max_height=self.size(2.8),
+            data_row_max_height=self.size(3.4 if two_line else 2.8),
             heading_text_style=ft.TextStyle(size=self.size(0.9),
                                             weight=ft.FontWeight.BOLD),
             data_text_style=ft.TextStyle(size=self.size()),
             columns=[ft.DataColumn(label=ft.Text(h, no_wrap=True),
                                    numeric=i in numeric)
                      for i, h in enumerate(heads)],
-            rows=[ft.DataRow(cells=[ft.DataCell(content=ft.Text(
-                str(v), no_wrap=True)) for v in row]) for row in rows])
+            rows=[ft.DataRow(cells=[ft.DataCell(content=self.table_cell(v))
+                                    for v in row]) for row in rows])
         return ft.Row(scroll=ft.ScrollMode.ALWAYS, controls=[ft.Container(
             padding=ft.Padding.only(bottom=SCROLLBAR_THICKNESS + 6),
             content=data_table)])
@@ -741,7 +780,7 @@ class EyedropApp:
         """
         report = self.report(summary=True)
         mode = report.name_mode
-        need_rows = [[line_name(line, mode), need_cell(line.req)]
+        need_rows = [[name_pair(line, mode), need_cell(line.req)]
                      + basis_cells(line.req) for line in report.lines]
         stock_rows = []
         for line in report.lines:
@@ -749,25 +788,25 @@ class EyedropApp:
             if req.as_needed:
                 continue
             stock_rows.append([
-                line_name(line, mode), req.stock,
+                name_pair(line, mode), req.stock,
                 md(req.opened) if req.opened else '',
                 '' if req.elapsed is None else req.elapsed,
                 remaining_text(req),
                 '' if line.last_days is None else line.last_days])
-        notes = [self.text(f'{line_name(line, mode)}: {text}', 0.9,
+        notes = [self.text(f'{join_pair(name_pair(line, mode))}: {text}', 0.9,
                            color=ft.Colors.ERROR if level == 'warning'
                            else None)
                  for line in report.lines for level, text in notices(line)]
         controls = [
             self.heading('目薬在庫'),
-            self.table([NAME_HEAD[mode], STOCK_HEAD, '開封分\n開封日',
+            self.table([NAME_HEADS[mode], STOCK_HEAD, '開封分\n開封日',
                         '経過\n日数', '残\n日数', '通常\n日数'],
                        stock_rows, numeric=(1, 3, 4, 5)),
             self.text('残日数：来院日の時点で現在使っている目薬の推定残量(日数)、'
                       '通常日数：この目薬は通常何日で使い切っているか', 0.8),
             self.heading('次回来院までに必要な本数'),
             *self.summary_date_controls(report.today, report.next_visit),
-            self.table([NAME_HEAD[mode]] + NEED_HEADS, need_rows,
+            self.table([NAME_HEADS[mode]] + NEED_HEADS, need_rows,
                        numeric=(1, 2, 3, 4, 5)),
             self.text('不足日数：次回来院日までの日数−在庫残日数'
                       '(マイナスは余る日数)。'
@@ -828,7 +867,7 @@ class EyedropApp:
                                 icon=ft.Icons.ADD)]
         for line in report.lines:
             req = line.req
-            name = line_name(line, report.name_mode)
+            name = join_pair(name_pair(line, report.name_mode))
             status = f'未開封 {req.stock}本'
             if req.as_needed:
                 status += ' / 随時使用'
@@ -1326,7 +1365,7 @@ class EyedropApp:
             ft.Row(controls=[
                 ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_size=32,
                               on_click=lambda e: self.show_detail(None)),
-                self.text(self.drug_label(drug_id), 1.3, bold=True)]),
+                self.text(self.drug_name(drug_id), 1.3, bold=True)]),
             self.text(f"代表目薬名: {drug['name']}", 0.9),
         ]
         if not self.db.is_active(drug_id):
